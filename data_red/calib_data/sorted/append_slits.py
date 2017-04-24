@@ -50,7 +50,7 @@ def append_slits(slitdata):
     slits = []
     itnos = np.arange(1, rowsno-2, 1)
     for i in itnos:
-        print(i)
+        print("pixelrow:\t", i)
         
         row, next1row, next2row = chipdata[i,:], chipdata[i+1,:], chipdata[i+2,:]    
         rowmed, next1rowmed, next2rowmed = np.median(row), np.median(next1row), np.median(next2row)   
@@ -58,15 +58,14 @@ def append_slits(slitdata):
         deriv = next1rowmed - rowmed
         nextderiv = next2rowmed - next1rowmed
         derivs.append(deriv)
-        print(derivs[-1], deriv, nextderiv)
-        
+                
         # Cut out slits and extraordinary and ordinary beams from the data array
         if np.abs(deriv) > 20. and np.abs(nextderiv) < 20.:          
             cutstart = i
                 
         if np.abs(deriv) < 20. and np.abs(nextderiv) > 20.:
             cutend = i
-
+            
             # Skips the first peak in the derivatives, so that slit can be cut out correctly
             try:
                 slit = chipdata[ cutstart:cutend, : ]
@@ -74,19 +73,26 @@ def append_slits(slitdata):
                     slits.append(slit)
             except NameError:
                 print("first max")
-       
-     
+    
+    
+    '''
+    plt.figure(0)
+    plt.scatter(itnos, derivs)
+    plt.show()
+    plt.close()
+    '''
 
     print("\n\n")
     for n in np.arange(0, len(slits), 2):
         
+        # Check that each slit contains the same number of pixel rows
         if slits[n+1].shape[0] < slits[n].shape[0]:
             newxlen = slits[n+1].shape[0]
             slits[n] = slits[n][0:newxlen, :]
             
         elif slits[n+1].shape[0] > slits[n].shape[0]:
             newxlen = slits[n].shape[0]
-            slits[n+1] = slits[n][0:newxlen, :]
+            slits[n+1] = slits[n+1][0:newxlen, :]
         
         
         # Compute the normalized difference between the ordinary and extroardinary slit (or the other way arround?)
@@ -109,27 +115,35 @@ def append_slits(slitdata):
 # Specify data and filename
 currdir = os.getcwd()
 datapath = currdir + "/NGC4696,IPOL/CHIP1"
-fname = "/FORS2.2011-05-04T02:13:13.455.fits"
+expdir_lst, expdata_lst = mk_lsts(datapath)
 # Specify bias and masterflat
 os.chdir("..")
 CALdir = os.getcwd()
 header, Mbias = extract_data(CALdir + "/masterbias.fits")
 header, Mflat_norm = extract_data(CALdir + "/masterflats/masterflat_norm_FLAT,LAM_IPOL_CHIP1.fits")
-os.chdir(datapath)
+os.chdir(currdir)
 
-# Read in file
-header, data = extract_data(datapath + fname)
-datacal = (data - Mbias) / Mflat_norm # Calibrated data
-# Append slits
-cal_slits = append_slits(datacal)
+# Read in files
+for f in expdata_lst:
+    print("\t\t{}".format(f))
+    header, data = extract_data(datapath + '/' +  f)
+    datacal = (data - Mbias) / Mflat_norm # Calibrated data
+    # Append slits
+    cal_slits = append_slits(datacal)
 
 
-'''
+    # Save to fits file
+    savedir = datapath + "/appended"
+    if not os.path.exists(savedir):
+        os.makedirs(savedir)
+    hdu = fits.PrimaryHDU(cal_slits)
+    hdulist = fits.HDUList([hdu])
+    hdulist.writeto(savedir + "/{}.fits".format(f.split(".fits")[0] + "_APPENDED"))
+
+
 ############### PLOTS #################
-plt.scatter(range(len(derivs)), derivs)
-plt.axis(xmin=0, xmax=len(derivs))
-plt.show()
-'''
+
+
 
 '''
 for n in np.arange(0, len(slits), 1):   

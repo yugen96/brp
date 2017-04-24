@@ -207,8 +207,8 @@ def compute_fluxlsts(std_dirs, bias, masterflat_norm, loc_lsts, r_range):
                     expno = header["HIERARCH ESO TPL EXPNO"]
                     filt_name = header["HIERARCH ESO INS FILT1 NAME"]
                     filt_id = header["HIERARCH ESO INS FILT1 ID"]
-                    ret_angle = header["HIERARCH ESO INS RETA2 POSANG"] * np.pi / 180.
-                    woll_angle = header["HIERARCH ESO INS WOLL POSANG"] * np.pi / 180.
+                    ret_angle = header["HIERARCH ESO INS RETA2 POSANG"] * np.pi / 180. #rad
+                    woll_angle = header["HIERARCH ESO INS WOLL POSANG"] * np.pi / 180. #rad
                     print("\t\t\t\tFILTER_ID: {A}; \t FILTER_NAME: {B}".format(A=filt_id, B = filt_name))
                     print("\t\t\t\tWollangle: {A}; \t Retangle: {B}".format(A=woll_angle, B = np.round(ret_angle, 2)))                
                       
@@ -395,14 +395,25 @@ def plot_circle(ax, radius, xc, yc, colour='b', tag=None):
 # - colour (opt):   character specifying the colour which should be used within the plot
 # - PLPHI (opt):    1D list specifying known P, sigmaP, Phi and sigmaPhi respectively
 # - Checks (opt):   Boolean for determining whether to plot the given polarizations
-def QvsU(fig, ax, QU, PlPhi, PLPHI=np.zeros(4), checkPphi=[False,False], plot_inset=False, inset_ax=None, colour='b', tag=None):
+def QvsU(fig, ax, QU, offsetangle=0., PLPHI=np.zeros(4), checkPphi=[False,False], plot_inset=False, inset_ax=None, colour='b', tag=None):
 
     # Decompose list
     [Q,sigmaQ,U,sigmaU] = QU
-    [Pl,sigmaPl,Phi,sigmaPhi] = PlPhi
+    # Offset corrections
+    offsetangle = offsetangle * np.pi / 180. #rad
+    Qcorr = Q*np.cos(offsetangle) - U*np.sin(offsetangle)
+    Ucorr = Q*np.sin(offsetangle) + U*np.cos(offsetangle)
     
-    # Plot QvsU point
-    ax.errorbar(Q, U, xerr = sigmaQ, yerr = sigmaU, fmt='.', markersize = 16., color = colour, label = tag) # STD star
+    
+    # Plot initial QvsU point
+    if tag == "b_HIGH":
+        uncorrtag = "uncorrected"
+    else:
+        uncorrtag = None
+    ax.errorbar(Q, U, xerr = sigmaQ, yerr = sigmaU, fmt='.', markersize = 16., color = "0.3", label=uncorrtag) # STD star
+    
+    # Plot QvsU point after offset correction
+    ax.errorbar(Qcorr, Ucorr, xerr = sigmaQ, yerr = sigmaU, fmt='.', markersize = 16., color = colour, label = tag) # STD star
     
     
     '''
@@ -422,7 +433,7 @@ def QvsU(fig, ax, QU, PlPhi, PLPHI=np.zeros(4), checkPphi=[False,False], plot_in
         plot_circle(ax, PL+sigmaPL, xc=0., yc=0., colour='0.5') # ESO documentation outer polarization circle
     if checkphi == True:
         PHI, sigmaPHI = PHI/180.*np.pi, sigmaPHI/180.*np.pi # rad
-        plotline = np.linspace(-Pl*1.5, Pl*1.5, 100)                 
+        plotline = np.linspace(-PL*1.5, PL*1.5, 100)                 
         x_plotline2 = plotline * np.cos(PHI)
         ylow_plotline2 = plotline * np.sin(PHI-sigmaPHI) 
         yhigh_plotline2 = plotline * np.sin(PHI+sigmaPHI)
@@ -431,15 +442,16 @@ def QvsU(fig, ax, QU, PlPhi, PLPHI=np.zeros(4), checkPphi=[False,False], plot_in
         
 
     if plot_inset == True:
-        inset_ax.errorbar(Q, U, xerr = sigmaQ, yerr = sigmaU, fmt='.', markersize = 16., color = colour, label = tag) # STD star
+        inset_ax.errorbar(Q, U, xerr = sigmaQ, yerr = sigmaU, fmt='.', markersize = 16., color = '0.3') # STD star
+        inset_ax.errorbar(Qcorr, Ucorr, xerr = sigmaQ, yerr = sigmaU, fmt='.', markersize = 16., color = colour) # STD star
         plot_circle(inset_ax, PL-sigmaPL, xc=0., yc=0., colour='0.5') # ESO documentation inner polarization circle
         plot_circle(inset_ax, PL+sigmaPL, xc=0., yc=0., colour='0.5') # ESO documentation outer polarization circle
         inset_ax.plot(x_plotline2, ylow_plotline2, color='0.5')
         inset_ax.plot(x_plotline2, yhigh_plotline2, color='0.5')
         inset_ax.axis(xmin=-0.095, xmax=-0.06, ymin=0.0, ymax=0.03)
         # Set inset_ax axes limits
-        inset_ax.set_xlim(-0.085, -.065)
-        inset_ax.set_ylim(0.005, 0.025)
+        inset_ax.set_xlim(-0.085, -.065) #TODO REMOVE HARDCODE
+        inset_ax.set_ylim(0.001, 0.021) #TODO REMOVE HARDCODE
         # fix the number of ticks on the inset axes
         inset_ax.yaxis.get_major_locator().set_params(nbins=1)
         inset_ax.xaxis.get_major_locator().set_params(nbins=1)
@@ -650,7 +662,7 @@ for i, std_dir in enumerate(std_dirs):
             # Select plot colour
             plotcolour = 'b'
             # Instrumental offset angle
-            offset = 1.54 # deg
+            offset = -2.3 # deg
             # Select correct ESO given polarizations
             ESO_PL, ESO_PHI = ESO_BV_PlPhi[0,0], ESO_BV_PlPhi[0,1]
             ESO_sigmaPL, ESO_sigmaPHI = ESO_BV_sigmaPlPhi[0,0], ESO_BV_sigmaPlPhi[0,1]
@@ -666,19 +678,19 @@ for i, std_dir in enumerate(std_dirs):
             # Select plot colour
             plotcolour = 'g'
             # Instrumental offset angle
-            offset = 1.80 # deg
+            offset = 3.4 # deg
             # Select correct ESO given polarizations
             ESO_PL, ESO_PHI = ESO_BV_PlPhi[1,0], ESO_BV_PlPhi[1,1]
             ESO_sigmaPL, ESO_sigmaPHI = ESO_BV_sigmaPlPhi[1,0], ESO_BV_sigmaPlPhi[1,1]
             
             seenV = True
         
+        #offset = offset*2.
         
         
         # Correct for instrumental offset
-        QUPphi0_jq = np.where(QUPphi_jq != QUPphi_jq[3,j,:], QUPphi0_jq, QUPphi0_jq + offset)
-        QUPphi0_jqr = np.where(QUPphi_jqr != QUPphi_jqr[3,j,:,:], QUPphi0_jqr, QUPphi0_jqr + offset)
-        print(QUPphi0_jq[3,:,0])
+        QUPphi0_jq = np.where(QUPphi_jq != QUPphi_jq[3,j,:], QUPphi0_jq, QUPphi0_jq - offset)
+        QUPphi0_jqr = np.where(QUPphi_jqr != QUPphi_jqr[3,j,:,:], QUPphi0_jqr, QUPphi0_jqr - offset)
         
         
         
@@ -711,7 +723,7 @@ for i, std_dir in enumerate(std_dirs):
             '''
             normfluxSKY_k, normfluxerrSKY_k = normfluxOE_jkq[n,j,:,-4::], normfluxerrOE_jkq[n,j,:,-4::]
             '''
-            
+            '''
             if J+1==7:
                 cumcorr7 = cumccorr
                 sigma_cumccorr7 = sigma_cumccorr
@@ -722,7 +734,8 @@ for i, std_dir in enumerate(std_dirs):
                 cumc7 = cumc
                 sigma_cumc7 = sigma_cumc
                 
-                print(cumcorr7) #TODO #TODO REMOVEEEEEEE!!!
+                #print(cumcorr7) #TODO #TODO REMOVEEEEEEE!!!
+            '''
             
             # Plot the waveplate-angular normflux profile in O and E for standard star
             plt.figure(1)
@@ -744,13 +757,15 @@ for i, std_dir in enumerate(std_dirs):
             plotinset = False
             axins = None
         
+        print(np.amax(QUPphi_jq[0], axis=1), np.amax(QUPphi0_jq[0], axis=1))
+        
         CHECKS = CHECKpphi[i]
-        PlPhi_lst = [QUPphi0_jq[2,j,0], sigmaQUPphi0_jq[2,j,0], 
-                     QUPphi0_jq[3,j,0], sigmaQUPphi0_jq[3,j,0]]  
+        PlPhi_lst = [QUPphi_jq[2,j,0], sigmaQUPphi_jq[2,j,0], 
+                     QUPphi_jq[3,j,0], sigmaQUPphi_jq[3,j,0]]  
         QU_lst = [QUPphi0_jq[0,j,0], sigmaQUPphi0_jq[0,j,0], 
                   QUPphi0_jq[1,j,0], sigmaQUPphi0_jq[1,j,0]]
                   
-        QvsU(fig3, ax3, QU=QU_lst, PlPhi=PlPhi_lst, 
+        QvsU(fig3, ax3, QU=QU_lst, offsetangle=offset, 
              colour=plotcolour, PLPHI=[ESO_PL,ESO_sigmaPL,
              ESO_PHI,ESO_sigmaPHI], checkPphi=CHECKS, 
              plot_inset=plotinset, inset_ax = axins, tag=lbl)
@@ -838,7 +853,7 @@ for i, std_dir in enumerate(std_dirs):
     plt.ylabel(r'$\frac{U}{I} \mathrm{\ [-]}$', fontsize=20)
     plt.legend(loc = 'upper left')
     plt.tight_layout()
-    plt.savefig(savedir + '/' + 'UvsQ')
+    plt.savefig(savedir + '/' + 'UvsQ_1')
     
 
     plt.figure(4)  
@@ -864,7 +879,7 @@ for i, std_dir in enumerate(std_dirs):
     plt.show()
     plt.close(0), plt.close(1), plt.close(2), plt.close(3), plt.close(4), plt.close(5)
 
-    
+    break
     
     # Create tables
     savedir = std_dir.split("/CHIP1")[0] + "/tables"
