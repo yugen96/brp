@@ -1,0 +1,93 @@
+\begin{thebibliography}{10}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[{B{\^i}rzan} et~al.(2004){B{\^i}rzan}, {Rafferty}, {McNamara}, {Wise},
+  and {Nulsen}]{Birzan2004}
+L.~{B{\^i}rzan}, D.~A. {Rafferty}, B.~R. {McNamara}, M.~W. {Wise}, and P.~E.~J.
+  {Nulsen}.
+\newblock {A Systematic Study of Radio-induced X-Ray Cavities in Clusters,
+  Groups, and Galaxies}.
+\newblock \emph{\apj}, 607:\penalty0 800--809, June 2004.
+\newblock \doi{10.1086/383519}.
+
+\bibitem[{Chen} et~al.(2007){Chen}, {Reiprich}, {B{\"o}hringer}, {Ikebe}, and
+  {Zhang}]{Chen2007}
+Y.~{Chen}, T.~H. {Reiprich}, H.~{B{\"o}hringer}, Y.~{Ikebe}, and Y.-Y. {Zhang}.
+\newblock {Statistics of X-ray observables for the cooling-core and non-cooling
+  core galaxy clusters}.
+\newblock \emph{\aap}, 466:\penalty0 805--812, May 2007.
+\newblock \doi{10.1051/0004-6361:20066471}.
+
+\bibitem[{Dunn} and {Fabian}(2006)]{Dunn2006}
+R.~J.~H. {Dunn} and A.~C. {Fabian}.
+\newblock {Investigating AGN heating in a sample of nearby clusters}.
+\newblock \emph{\mnras}, 373:\penalty0 959--971, December 2006.
+\newblock \doi{10.1111/j.1365-2966.2006.11080.x}.
+
+\bibitem[{Fabian}(2012)]{Fabian2012}
+A.~C. {Fabian}.
+\newblock {Observational Evidence of Active Galactic Nuclei Feedback}.
+\newblock \emph{\araa}, 50:\penalty0 455--489, September 2012.
+\newblock \doi{10.1146/annurev-astro-081811-125521}.
+
+\bibitem[{Fabian} et~al.(2016){Fabian}, {Walker}, {Russell}, {Pinto},
+  {Canning}, {Salome}, {Sanders}, {Taylor}, {Zweibel}, {Conselice}, {Combes},
+  {Crawford}, {Ferland}, {Gallagher}, {Hatch}, {Johnstone}, and
+  {Reynolds}]{Fabian2016}
+A.~C. {Fabian}, S.~A. {Walker}, H.~R. {Russell}, C.~{Pinto}, R.~E.~A.
+  {Canning}, P.~{Salome}, J.~S. {Sanders}, G.~B. {Taylor}, E.~G. {Zweibel},
+  C.~J. {Conselice}, F.~{Combes}, C.~S. {Crawford}, G.~J. {Ferland}, J.~S.
+  {Gallagher}, III, N.~A. {Hatch}, R.~M. {Johnstone}, and C.~S. {Reynolds}.
+\newblock {HST imaging of the dusty filaments and nucleus swirl in NGC4696 at
+  the centre of the Centaurus Cluster}.
+\newblock \emph{\mnras}, 461:\penalty0 922--928, September 2016.
+\newblock \doi{10.1093/mnras/stw1350}.
+
+\bibitem[{Hudson} et~al.(2010){Hudson}, {Mittal}, {Reiprich}, {Nulsen},
+  {Andernach}, and {Sarazin}]{Hudson2010}
+D.~S. {Hudson}, R.~{Mittal}, T.~H. {Reiprich}, P.~E.~J. {Nulsen},
+  H.~{Andernach}, and C.~L. {Sarazin}.
+\newblock {What is a cool-core cluster? a detailed analysis of the cores of the
+  X-ray flux-limited HIFLUGCS cluster sample}.
+\newblock \emph{\aap}, 513:\penalty0 A37, April 2010.
+\newblock \doi{10.1051/0004-6361/200912377}.
+
+\bibitem[{Makishima} et~al.(2001){Makishima}, {Ezawa}, {Fukuzawa}, {Honda},
+  {Ikebe}, {Kamae}, {Kikuchi}, {Matsushita}, {Nakazawa}, {Ohashi}, {Takahashi},
+  {Tamura}, and {Xu}]{Makishima2001}
+K.~{Makishima}, H.~{Ezawa}, Y.~{Fukuzawa}, H.~{Honda}, Y.~{Ikebe}, T.~{Kamae},
+  K.~{Kikuchi}, K.~{Matsushita}, K.~{Nakazawa}, T.~{Ohashi}, T.~{Takahashi},
+  T.~{Tamura}, and H.~{Xu}.
+\newblock {X-Ray Probing of the Central Regions of Clusters of Galaxies}.
+\newblock \emph{\pasj}, 53:\penalty0 401--420, June 2001.
+\newblock \doi{10.1093/pasj/53.3.401}.
+
+\bibitem[{McNamara} and {Nulsen}(2012)]{McNamara2012}
+B.~R. {McNamara} and P.~E.~J. {Nulsen}.
+\newblock {Mechanical feedback from active galactic nuclei in galaxies, groups
+  and clusters}.
+\newblock \emph{New Journal of Physics}, 14\penalty0 (5):\penalty0 055023, May
+  2012.
+\newblock \doi{10.1088/1367-2630/14/5/055023}.
+
+\bibitem[{Sanderson} et~al.(2006){Sanderson}, {Ponman}, and
+  {O'Sullivan}]{Sanderson2006}
+A.~J.~R. {Sanderson}, T.~J. {Ponman}, and E.~{O'Sullivan}.
+\newblock {A statistically selected Chandra sample of 20 galaxy clusters - I.
+  Temperature and cooling time profiles}.
+\newblock \emph{\mnras}, 372:\penalty0 1496--1508, November 2006.
+\newblock \doi{10.1111/j.1365-2966.2006.10956.x}.
+
+\bibitem[{Sanderson} et~al.(2009){Sanderson}, {O'Sullivan}, and
+  {Ponman}]{Sanderson2009}
+A.~J.~R. {Sanderson}, E.~{O'Sullivan}, and T.~J. {Ponman}.
+\newblock {A statistically selected Chandra sample of 20 galaxy clusters - II.
+  Gas properties and cool core/non-cool core bimodality}.
+\newblock \emph{\mnras}, 395:\penalty0 764--776, May 2009.
+\newblock \doi{10.1111/j.1365-2966.2009.14613.x}.
+
+\end{thebibliography}

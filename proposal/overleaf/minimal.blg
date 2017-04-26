@@ -1,0 +1,80 @@
+This is BibTeX, Version 0.99d (TeX Live 2014)
+Capacity: max_strings=35307, hash_size=35307, hash_prime=30011
+The top-level auxiliary file: minimal.aux
+The style file: plainnat.bst
+I couldn't open database file brpref3.bib.bib
+---line 63 of file minimal.aux
+ : \bibdata{brpref3.bib
+ :                     }
+I'm skipping whatever remains of this command
+I found no database files---while reading file minimal.aux
+Warning--I didn't find a database entry for "Fabian2012"
+Warning--I didn't find a database entry for "Fabian2016"
+Warning--I didn't find a database entry for "Fabian1977"
+Warning--I didn't find a database entry for "Lea1973"
+Warning--I didn't find a database entry for "Cowie1977"
+Warning--I didn't find a database entry for "Mathews1978"
+Warning--I didn't find a database entry for "McNamara1989"
+Warning--I didn't find a database entry for "Edge2001"
+Warning--I didn't find a database entry for "Makishima2001"
+Warning--I didn't find a database entry for "Peterson2001"
+Warning--I didn't find a database entry for "Peterson2003"
+Warning--I didn't find a database entry for "Tamura2001"
+Warning--I didn't find a database entry for "Xu2002"
+Warning--I didn't find a database entry for "Zakamska2002"
+Warning--I didn't find a database entry for "Guo2007"
+Warning--I didn't find a database entry for "Mathews2005"
+Warning--I didn't find a database entry for "Ruszkowski2003"
+Warning--I didn't find a database entry for "Dennis2006"
+Warning--I didn't find a database entry for "Tombesi2011"
+Warning--I didn't find a database entry for "Rupke2011"
+Warning--I didn't find a database entry for "Churazov2000"
+Warning--I didn't find a database entry for "Churazov2000a"
+Warning--I didn't find a database entry for "McNamara2000"
+Warning--I didn't find a database entry for "Fabian2008"
+Warning--I didn't find a database entry for "Bagnulo2009"
+Warning--I didn't find a database entry for "Hudson2010"
+Warning--I didn't find a database entry for "Chen2007"
+Warning--I didn't find a database entry for "Sanderson2008"
+You've used 0 entries,
+            2773 wiz_defined-function locations,
+            648 strings with 5423 characters,
+and the built_in function-call counts, 33 in all, are:
+= -- 0
+> -- 0
+< -- 0
++ -- 0
+- -- 0
+* -- 2
+:= -- 10
+add.period$ -- 0
+call.type$ -- 0
+change.case$ -- 0
+chr.to.int$ -- 0
+cite$ -- 0
+duplicate$ -- 0
+empty$ -- 1
+format.name$ -- 0
+if$ -- 1
+int.to.chr$ -- 1
+int.to.str$ -- 1
+missing$ -- 0
+newline$ -- 8
+num.names$ -- 0
+pop$ -- 0
+preamble$ -- 1
+purify$ -- 0
+quote$ -- 0
+skip$ -- 1
+stack$ -- 0
+substring$ -- 0
+swap$ -- 0
+text.length$ -- 0
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 0
+warning$ -- 0
+while$ -- 0
+width$ -- 0
+write$ -- 7
+(There were 2 error messages)

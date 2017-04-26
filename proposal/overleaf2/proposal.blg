@@ -1,0 +1,52 @@
+This is BibTeX, Version 0.99d (TeX Live 2014)
+Capacity: max_strings=35307, hash_size=35307, hash_prime=30011
+The top-level auxiliary file: proposal.aux
+The style file: plainnat.bst
+Database file #1: brpref.bib.bib
+Warning--empty journal in Chen2007
+Warning--empty journal in Fabian2012
+Warning--empty journal in Fabian2016
+Warning--empty journal in Hudson2010
+Warning--empty journal in Makishima2001
+You've used 29 entries,
+            2773 wiz_defined-function locations,
+            855 strings with 14166 characters,
+and the built_in function-call counts, 18425 in all, are:
+= -- 1673
+> -- 1462
+< -- 9
++ -- 489
+- -- 459
+* -- 1798
+:= -- 2993
+add.period$ -- 157
+call.type$ -- 29
+change.case$ -- 240
+chr.to.int$ -- 28
+cite$ -- 63
+duplicate$ -- 597
+empty$ -- 1116
+format.name$ -- 504
+if$ -- 3701
+int.to.chr$ -- 2
+int.to.str$ -- 1
+missing$ -- 29
+newline$ -- 223
+num.names$ -- 116
+pop$ -- 365
+preamble$ -- 1
+purify$ -- 211
+quote$ -- 0
+skip$ -- 492
+stack$ -- 0
+substring$ -- 640
+swap$ -- 51
+text.length$ -- 0
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 319
+warning$ -- 5
+while$ -- 134
+width$ -- 0
+write$ -- 518
+(There were 5 warnings)

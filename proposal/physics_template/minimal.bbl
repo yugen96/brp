@@ -1,0 +1,258 @@
+\begin{thebibliography}{24}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Bagnulo et~al.(2009)Bagnulo, Landolfi, Landstreet, {Landi
+  Degl'Innocenti}, Fossati, and Sterzik]{Bagnulo2009}
+S.~Bagnulo, M.~Landolfi, J.~D. Landstreet, E.~{Landi Degl'Innocenti},
+  L.~Fossati, and M.~Sterzik.
+\newblock {Stellar Spectropolarimetry with Retarder Waveplate and Beam Splitter
+  Devices}.
+\newblock \emph{Publications of the Astronomical Society of the Pacific},
+  121\penalty0 (883):\penalty0 993--1015, 2009.
+\newblock ISSN 0004-6280.
+\newblock \doi{10.1086/605654}.
+\newblock URL \url{http://iopscience.iop.org/article/10.1086/605654}.
+
+\bibitem[Chen et~al.(2007)Chen, Reiprich, B{\"{o}}hringer, Ikebe, and
+  Zhang]{Chen2007}
+Y~Chen, T.{\~{}}H. Reiprich, H~B{\"{o}}hringer, Y~Ikebe, and Y.-Y. Zhang.
+\newblock {Statistics of X-ray observables for the cooling-core and non-cooling
+  core galaxy clusters}.
+\newblock 466:\penalty0 805--812, may 2007.
+\newblock \doi{10.1051/0004-6361:20066471}.
+
+\bibitem[Churazov et~al.(2000{\natexlab{a}})Churazov, Br{\"{u}}ggen, Kaiser,
+  B{\"{o}}hringer, and Forman]{Churazov2000}
+E.~Churazov, M.~Br{\"{u}}ggen, C.~R. Kaiser, H.~B{\"{o}}hringer, and W.~Forman.
+\newblock {Evolution of Buoyant Bubbles in M87}.
+\newblock \emph{The Astrophysical Journal, Volume 554, Issue 1, pp. 261-273.},
+  554:\penalty0 261--273, aug 2000{\natexlab{a}}.
+\newblock ISSN 0004-637X.
+\newblock \doi{10.1086/321357}.
+\newblock URL \url{http://arxiv.org/abs/astro-ph/0008215
+  http://dx.doi.org/10.1086/321357}.
+
+\bibitem[Churazov et~al.(2000{\natexlab{b}})Churazov, Forman, Jones, and
+  Bohringer]{Churazov2000a}
+E.~Churazov, W.~Forman, C.~Jones, and H.~Bohringer.
+\newblock {Asymmetric, arc minute scale structures around NGC 1275}.
+\newblock \emph{Astronomy and Astrophysics, v.356, p.788-794 (2000)},
+  356:\penalty0 788--794, feb 2000{\natexlab{b}}.
+\newblock ISSN 0004-6361.
+\newblock URL \url{http://arxiv.org/abs/astro-ph/0002375}.
+
+\bibitem[Cowie and Binney(1977)]{Cowie1977}
+L.~L. Cowie and J.~Binney.
+\newblock {Radiative regulation of gas flow within clusters of galaxies - A
+  model for cluster X-ray sources}.
+\newblock \emph{The Astrophysical Journal}, 215:\penalty0 723, aug 1977.
+\newblock ISSN 0004-637X.
+\newblock \doi{10.1086/155406}.
+\newblock URL \url{http://adsabs.harvard.edu/doi/10.1086/155406}.
+
+\bibitem[Dennis and J.(2006)]{Dennis2006}
+Timothy~J. Dennis and Timothy J.
+\newblock {An examination of the plausibility of convective turbulence as a
+  source of heating for the intra-cluster medium of cooling-core galaxy
+  clusters}.
+\newblock \emph{Proquest Dissertations And Theses 2006. Section 0096, Part 0606
+  125 pages; [Ph.D. dissertation].United States -- Iowa: The University of
+  Iowa; 2006. Publication Number: AAT 3248002. Source: DAI-B 68/01, Jul 2007},
+  2006.
+\newblock URL \url{http://adsabs.harvard.edu/abs/2006PhDT........11D}.
+
+\bibitem[Edge and C.(2001)]{Edge2001}
+A.~C. Edge and A.~C.
+\newblock {The detection of molecular gas in the central galaxies of
+  cooling-flow clusters}.
+\newblock \emph{Monthly Notices of the Royal Astronomical Society, Volume 328,
+  Issue 3, pp. 762-782.}, 328:\penalty0 762--782, jun 2001.
+\newblock ISSN 0035-8711.
+\newblock \doi{10.1046/j.1365-8711.2001.04802.x}.
+\newblock URL \url{http://arxiv.org/abs/astro-ph/0106225
+  http://dx.doi.org/10.1046/j.1365-8711.2001.04802.x}.
+
+\bibitem[Fabian et~al.(2008)Fabian, Johnstone, Sanders, Conselice, Crawford,
+  Gallagher, and Zweibel]{Fabian2008}
+A.~C. Fabian, R.~M. Johnstone, J.~S. Sanders, C.~J. Conselice, C.~S. Crawford,
+  J.~S. Gallagher, and E.~Zweibel.
+\newblock {Magnetic support of the optical emission line filaments in NGC
+  1275}.
+\newblock \emph{Nature, Volume 454, Issue 7207, pp. 968-970 (2008).},
+  454:\penalty0 968--970, aug 2008.
+\newblock ISSN 0028-0836.
+\newblock \doi{10.1038/nature07169}.
+\newblock URL \url{http://arxiv.org/abs/0808.2712
+  http://dx.doi.org/10.1038/nature07169}.
+
+\bibitem[Fabian(2012)]{Fabian2012}
+A.{\~{}}C. Fabian.
+\newblock {Observational Evidence of Active Galactic Nuclei Feedback}.
+\newblock 50:\penalty0 455--489, sep 2012.
+\newblock \doi{10.1146/annurev-astro-081811-125521}.
+
+\bibitem[Fabian et~al.(2016)Fabian, Walker, Russell, Pinto, Canning, Salome,
+  Sanders, Taylor, Zweibel, Conselice, Combes, Crawford, Ferland, {Gallagher
+  III}, Hatch, Johnstone, and Reynolds]{Fabian2016}
+A.{\~{}}C. Fabian, S.{\~{}}A. Walker, H.{\~{}}R. Russell, C~Pinto,
+  R.{\~{}}E.{\~{}}A. Canning, P~Salome, J.{\~{}}S. Sanders, G.{\~{}}B. Taylor,
+  E.{\~{}}G. Zweibel, C.{\~{}}J. Conselice, F~Combes, C.{\~{}}S. Crawford,
+  G.{\~{}}J. Ferland, J.{\~{}}S. {Gallagher III}, N.{\~{}}A. Hatch, R.{\~{}}M.
+  Johnstone, and C.{\~{}}S. Reynolds.
+\newblock {HST imaging of the dusty filaments and nucleus swirl in NGC4696 at
+  the centre of the Centaurus Cluster}.
+\newblock 461:\penalty0 922--928, sep 2016.
+\newblock \doi{10.1093/mnras/stw1350}.
+
+\bibitem[Hudson et~al.(2010)Hudson, Mittal, Reiprich, Nulsen, Andernach, and
+  Sarazin]{Hudson2010}
+D.{\~{}}S. Hudson, R~Mittal, T.{\~{}}H. Reiprich, P.{\~{}}E.{\~{}}J. Nulsen,
+  H~Andernach, and C.{\~{}}L. Sarazin.
+\newblock {What is a cool-core cluster? a detailed analysis of the cores of the
+  X-ray flux-limited HIFLUGCS cluster sample}.
+\newblock 513:\penalty0 A37, apr 2010.
+\newblock \doi{10.1051/0004-6361/200912377}.
+
+\bibitem[Lea et~al.(1973)Lea, Silk, Kellogg, and Murray]{Lea1973}
+Susan~M. Lea, Joseph Silk, E.~Kellogg, and S.~Murray.
+\newblock {Thermal-Bremsstrahlung Interpretation of Cluster X-Ray Sources}.
+\newblock \emph{The Astrophysical Journal}, 184:\penalty0 L105, sep 1973.
+\newblock ISSN 0004-637X.
+\newblock \doi{10.1086/181300}.
+\newblock URL \url{http://adsabs.harvard.edu/doi/10.1086/181300}.
+
+\bibitem[Makishima et~al.(2001)Makishima, Ezawa, Fukuzawa, Honda, Ikebe, Kamae,
+  Kikuchi, Matsushita, Nakazawa, Ohashi, Takahashi, Tamura, and
+  Xu]{Makishima2001}
+K~Makishima, H~Ezawa, Y~Fukuzawa, H~Honda, Y~Ikebe, T~Kamae, K~Kikuchi,
+  K~Matsushita, K~Nakazawa, T~Ohashi, T~Takahashi, T~Tamura, and H~Xu.
+\newblock {X-Ray Probing of the Central Regions of Clusters of Galaxies}.
+\newblock 53:\penalty0 401--420, jun 2001.
+\newblock \doi{10.1093/pasj/53.3.401}.
+
+\bibitem[Mathews and Bregman(1978)]{Mathews1978}
+W.~G. Mathews and J.~N. Bregman.
+\newblock {Radiative accretion flow onto giant galaxies in clusters}.
+\newblock \emph{The Astrophysical Journal}, 224:\penalty0 308, sep 1978.
+\newblock ISSN 0004-637X.
+\newblock \doi{10.1086/156379}.
+\newblock URL \url{http://adsabs.harvard.edu/doi/10.1086/156379}.
+
+\bibitem[Mathews et~al.(2005)Mathews, Faltenbacher, and Brighenti]{Mathews2005}
+W.~G. Mathews, A.~Faltenbacher, and F.~Brighenti.
+\newblock {Heating Cooling Flows with Weak Shock Waves}.
+\newblock \emph{The Astrophysical Journal, Volume 638, Issue 2, pp. 659-667.},
+  638:\penalty0 659--667, nov 2005.
+\newblock ISSN 0004-637X.
+\newblock \doi{10.1086/499119}.
+\newblock URL \url{http://arxiv.org/abs/astro-ph/0511151
+  http://dx.doi.org/10.1086/499119}.
+
+\bibitem[McNamara et~al.(1989)McNamara, O'Connell, and Bregman]{McNamara1989}
+B.~R. McNamara, R.~W. O'Connell, and J.~N. Bregman.
+\newblock {Evidence for Star Formation and H I in Cluster Cooling Flows}.
+\newblock \emph{Bulletin of the American Astronomical Society, Vol. 21,
+  p.1133}, 21:\penalty0 1133, 1989.
+\newblock URL \url{http://adsabs.harvard.edu/abs/1989BAAS...21.1133M}.
+
+\bibitem[McNamara et~al.(2000)McNamara, Wise, Nulsen, David, Sarazin, Bautz,
+  Markevitch, Vikhlinin, Forman, Jones, and Harris]{McNamara2000}
+B.~R. McNamara, M.~Wise, P.~E.~J. Nulsen, L.~P. David, C.~L. Sarazin, M.~Bautz,
+  M.~Markevitch, A.~Vikhlinin, W.~R. Forman, C.~Jones, and D.~E. Harris.
+\newblock {Chandra X-ray Observations of the Hydra A Cluster: An Interaction
+  Between the Radio Source and the X-Ray-Emitting Gas}.
+\newblock \emph{The Astrophysical Journal, Volume 534, Issue 2, pp.
+  L135-L138.}, 534:\penalty0 L135--L138, jan 2000.
+\newblock ISSN 0004-637X.
+\newblock \doi{10.1086/312662}.
+\newblock URL \url{http://arxiv.org/abs/astro-ph/0001402
+  http://dx.doi.org/10.1086/312662}.
+
+\bibitem[Peterson et~al.(2001)Peterson, Paerels, Kaastra, Arnaud, Reiprich,
+  Fabian, Mushotzky, Jernigan, and Sakelliou]{Peterson2001}
+J.~R. Peterson, F.~B.~S. Paerels, J.~S. Kaastra, M.~Arnaud, T.~H. Reiprich,
+  A.~C. Fabian, R.~F. Mushotzky, J.~G. Jernigan, and I.~Sakelliou.
+\newblock {X-ray imaging-spectroscopy of Abell 1835}.
+\newblock \emph{Astronomy and Astrophysics}, 365\penalty0 (1):\penalty0
+  L104--L109, jan 2001.
+\newblock ISSN 0004-6361.
+\newblock \doi{10.1051/0004-6361:20000021}.
+\newblock URL \url{http://www.edpsciences.org/10.1051/0004-6361:20000021}.
+
+\bibitem[Peterson et~al.(2003)Peterson, Kahn, Paerels, Kaastra, Tamura,
+  Bleeker, Ferrigno, and Jernigan]{Peterson2003}
+J.~R. Peterson, S.~M. Kahn, F.~B.~S. Paerels, J.~S. Kaastra, T.~Tamura,
+  J.~A.~M. Bleeker, C.~Ferrigno, and J.~G. Jernigan.
+\newblock {High‐Resolution X‐Ray Spectroscopic Constraints on
+  Cooling‐Flow Models for Clusters of Galaxies}.
+\newblock \emph{The Astrophysical Journal}, 590\penalty0 (1):\penalty0
+  207--224, jun 2003.
+\newblock ISSN 0004-637X.
+\newblock \doi{10.1086/374830}.
+\newblock URL \url{http://stacks.iop.org/0004-637X/590/i=1/a=207}.
+
+\bibitem[Rupke and Veilleux(2011)]{Rupke2011}
+David S.~N. Rupke and Sylvain Veilleux.
+\newblock {Integral Field Spectroscopy of Massive, Kiloparsec-Scale Outflows in
+  the Infrared-Luminous QSO Mrk 231}.
+\newblock \emph{The Astrophysical Journal Letters, Volume 729, Issue 2, article
+  id. L27, 7 pp. (2011).}, 729, feb 2011.
+\newblock ISSN 0004-637X.
+\newblock \doi{10.1088/2041-8205/729/2/L27}.
+\newblock URL \url{http://arxiv.org/abs/1102.4349
+  http://dx.doi.org/10.1088/2041-8205/729/2/L27}.
+
+\bibitem[Ruszkowski et~al.(2003)Ruszkowski, Bruggen, and
+  Begelman]{Ruszkowski2003}
+Mateusz Ruszkowski, Marcus Bruggen, and Mitchell~C. Begelman.
+\newblock {Cluster Heating by Viscous Dissipation of Sound Waves}.
+\newblock \emph{The Astrophysical Journal, Volume 611, Issue 1, pp. 158-163.},
+  611:\penalty0 158--163, oct 2003.
+\newblock ISSN 0004-637X.
+\newblock \doi{10.1086/422158}.
+\newblock URL \url{http://arxiv.org/abs/astro-ph/0310760
+  http://dx.doi.org/10.1086/422158}.
+
+\bibitem[Tamura et~al.(2001)Tamura, Kaastra, Peterson, Paerels, Mittaz,
+  Trudolyubov, Stewart, Fabian, Mushotzky, Lumb, and Ikebe]{Tamura2001}
+T.~Tamura, J.~S. Kaastra, J.~R. Peterson, F.~B.~S. Paerels, J.~P.~D. Mittaz,
+  S.~P. Trudolyubov, G.~Stewart, A.~C. Fabian, R.~F. Mushotzky, D.~H. Lumb, and
+  Y.~Ikebe.
+\newblock {X-ray spectroscopy of the cluster of galaxies Abell 1795 with
+  XMM-Newton}.
+\newblock \emph{Astronomy and Astrophysics}, 365\penalty0 (1):\penalty0
+  L87--L92, jan 2001.
+\newblock ISSN 0004-6361.
+\newblock \doi{10.1051/0004-6361:20000038}.
+\newblock URL \url{http://www.edpsciences.org/10.1051/0004-6361:20000038}.
+
+\bibitem[Tombesi et~al.(2011)Tombesi, Cappi, Reeves, Palumbo, Braito, and
+  Dadina]{Tombesi2011}
+F.~Tombesi, M.~Cappi, J.~N. Reeves, G.~G.~C. Palumbo, V.~Braito, and M.~Dadina.
+\newblock {Evidence for ultra-fast outflows in radio-quiet AGNs: II - detailed
+  photo-ionization modeling of Fe K-shell absorption lines}.
+\newblock \emph{The Astrophysical Journal, Volume 742, Issue 1, article id. 44,
+  21 pp. (2011).}, 742, sep 2011.
+\newblock ISSN 0004-637X.
+\newblock \doi{10.1088/0004-637X/742/1/44}.
+\newblock URL \url{http://arxiv.org/abs/1109.2882
+  http://dx.doi.org/10.1088/0004-637X/742/1/44}.
+
+\bibitem[Xu et~al.(2002)Xu, Kahn, Peterson, Behar, Paerels, Mushotzky,
+  Jernigan, Brinkman, and Makishima]{Xu2002}
+H.~Xu, S.~M. Kahn, J.~R. Peterson, E.~Behar, F.~B.~S. Paerels, R.~F. Mushotzky,
+  J.~G. Jernigan, A.~C. Brinkman, and K.~Makishima.
+\newblock {High‐Resolution Observations of the Elliptical Galaxy NGC 4636
+  with the Reflection Grating Spectrometer on Board
+  {\textless}i{\textgreater}XMM‐Newton{\textless}/i{\textgreater}}.
+\newblock \emph{The Astrophysical Journal}, 579\penalty0 (2):\penalty0
+  600--606, nov 2002.
+\newblock ISSN 0004-637X.
+\newblock \doi{10.1086/342828}.
+\newblock URL \url{http://stacks.iop.org/0004-637X/579/i=2/a=600}.
+
+\end{thebibliography}

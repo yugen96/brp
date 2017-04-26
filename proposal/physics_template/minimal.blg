@@ -1,0 +1,57 @@
+This is BibTeX, Version 0.99d (TeX Live 2014)
+Capacity: max_strings=35307, hash_size=35307, hash_prime=30011
+The top-level auxiliary file: minimal.aux
+The style file: plainnat.bst
+Database file #1: brpref3.bib.bib
+Warning--I didn't find a database entry for "Fabian1977"
+Warning--I didn't find a database entry for "Zakamska2003"
+Warning--I didn't find a database entry for "Guo2008"
+Warning--I didn't find a database entry for "Sanderson2006"
+Warning--I didn't find a database entry for "Sanderson2009"
+Warning--empty journal in Chen2007
+Warning--empty journal in Fabian2012
+Warning--empty journal in Fabian2016
+Warning--empty journal in Hudson2010
+Warning--empty journal in Makishima2001
+You've used 24 entries,
+            2773 wiz_defined-function locations,
+            821 strings with 12877 characters,
+and the built_in function-call counts, 15901 in all, are:
+= -- 1413
+> -- 1339
+< -- 6
++ -- 448
+- -- 423
+* -- 1573
+:= -- 2599
+add.period$ -- 129
+call.type$ -- 24
+change.case$ -- 213
+chr.to.int$ -- 23
+cite$ -- 53
+duplicate$ -- 495
+empty$ -- 920
+format.name$ -- 457
+if$ -- 3175
+int.to.chr$ -- 2
+int.to.str$ -- 1
+missing$ -- 24
+newline$ -- 185
+num.names$ -- 96
+pop$ -- 334
+preamble$ -- 1
+purify$ -- 189
+quote$ -- 0
+skip$ -- 418
+stack$ -- 0
+substring$ -- 514
+swap$ -- 42
+text.length$ -- 0
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 264
+warning$ -- 5
+while$ -- 109
+width$ -- 0
+write$ -- 427
+(There were 10 warnings)
