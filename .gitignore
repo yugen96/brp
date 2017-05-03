@@ -49,6 +49,13 @@ Thumbs.db
 *.list
 
 
+# Images
+#####################
+*.jpeg
+*.jpg
+*.png
+
+
 # Home made backups #
 #####################
 *.bak

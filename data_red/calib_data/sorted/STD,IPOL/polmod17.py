@@ -8,6 +8,7 @@ from astropy.visualization.mpl_normalize import ImageNormalize
 
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
+from matplotlib.ticker import FormatStrFormatter
 from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 
@@ -112,8 +113,8 @@ def apersum(image, px, py, r):
     
     # Compute the total count rate within the aperture
     apsum = 0.0
-    for i in range(apx_min, apx_max):
-        for j in range(apy_min, apy_max):
+    for i in range(apx_min, apx_max+1):
+        for j in range(apy_min, apy_max+1):
             
             # Calculate squared distance to central pixel
             dx = i - px
@@ -121,7 +122,7 @@ def apersum(image, px, py, r):
             d2 = dx**2 + dy**2
             
             # Store the current pixel's count value
-            pixval = image[j,i]
+            pixval = image[j-1,i-1]
             
             if d2 <= r**2:
                 apsum += pixval
@@ -136,10 +137,6 @@ def compute_fluxlsts(std_dirs, bias, masterflat_norm, loc_lsts, r_range):
     # Compute the linear polarization degrees for each template of exposures taken of Vela1_95 and WD1615_154
     for i, std_dir in enumerate(std_dirs): 
         print("\n\n\n{}".format(std_dir))
-        
-        # Skip 'loadfiles' directory      
-        if std_dir == "loadfiles":
-            continue
             
             
             
@@ -159,23 +156,20 @@ def compute_fluxlsts(std_dirs, bias, masterflat_norm, loc_lsts, r_range):
         # List for storing the filters of each exposure as well as the q-index and xcoordinate of the STD star within each template (axis1) and each exposure (axis2)
         filter_lst = []
         for j, tpl_name in enumerate(tpl_dirlst):
+            print("\n\n\t {}".format(tpl_name))
             tpl_dir = std_dir + '/' + tpl_name
+            
+            # Skip non-usable templates (non-usable templates should be put in a folder "skipped" or an equivalent directory which doesn't start with the string "tpl").
+            if std_dir.split("/")[-2] == "Vela1_95" and tpl_name in ["tpl1", "tpl2", "tpl3"]:
+                continue 
+            
             
             # Create a list with filenames of files stored within tpldir
             expdir_lst, expfile_lst = mk_lsts(tpl_dir)
             expfile_lst = np.sort(expfile_lst)
             
             # Initial setting for the least amount of detected stars within the template
-            N_stars = 1e18   
-            
-            # Skips the first template taken of Vela1_95, since the star is on the edge of a slit within this template
-            if (tpl_dir == veladir + "/tpl1") or (len(expfile_lst) < 4):
-                print("\n\n\tSKIP {}!!!".format(tpl_name))
-                continue
-            else:
-                tpl_name = tpl_dirlst[j]
-                print("\n\n\t{}".format(tpl_name))      
-            
+            N_stars = 1e18
             
             
             # Initiate first sublists for distinguishing different exposures
@@ -200,9 +194,9 @@ def compute_fluxlsts(std_dirs, bias, masterflat_norm, loc_lsts, r_range):
                     hdu = fits.PrimaryHDU(data)
                     hdulist = fits.HDUList([hdu])
                     hdulist.writeto(savedir + '/' + f.split(".fits")[0] + "_COR.fits")
-
-
-           
+                    
+                    
+                    
                     # Specify observation parameters
                     expno = header["HIERARCH ESO TPL EXPNO"]
                     filt_name = header["HIERARCH ESO INS FILT1 NAME"]
@@ -222,11 +216,11 @@ def compute_fluxlsts(std_dirs, bias, masterflat_norm, loc_lsts, r_range):
 
                         # Finds the central pixel of the selected stars within the specific exposure                    
                         coord1, coord2 = coord[0:2], [coord[0],coord[2]]
-                        if q != len(loc_lsts[i]):
+                        if q not in np.arange(len(loc_lsts[i])-4, len(loc_lsts[i]), 1):
                             center1 = find_center(coord1, data, 15)
                             center2 = find_center(coord2, data, 15)
                             centers = [center1, center2]
-                        if q == len(loc_lsts[i]):
+                        if q in np.arange(len(loc_lsts[i])-4, len(loc_lsts[i]), 1):
                             centers = [coord1, coord2] # Sky aperture
                         
 
@@ -277,7 +271,7 @@ def compute_fluxlsts(std_dirs, bias, masterflat_norm, loc_lsts, r_range):
         F_0lst, sigmaF_0lst = np.array(F_0lst), np.array(sigmaF_0lst) 
         
         # Save the flux arrays
-        savedir = stddatadir + "/loadfiles/" + std_dir.split("/")[-2]
+        savedir = std_dir.rsplit("/",2)[0] + "/loadfiles/" + std_dir.rsplit("/",2)[1]
         if not os.path.exists(savedir):
             os.makedirs(savedir)
         np.save(savedir + "/O_0lst.npy", O_0lst), np.save(savedir + "/sigmaO_0lst.npy", sigmaO_0lst)
@@ -312,7 +306,7 @@ def load_lsts(loaddir):
     print("List structures loaded...")
     # Load filter_lst
     filter_lst = np.load("filter_lst.npy")
-    os.chdir(stddatadir)
+    os.chdir(currdir)
     
     return np.array([O_jkqr, E_jkqr, F_jkqr]), np.array([sigmaO_jkqr, sigmaE_jkqr, sigmaF_jkqr]), filter_lst
 
@@ -348,7 +342,35 @@ def select_r(jkqr_lst, regindex, radindex):
     
     jkq_lst = jkqr_lst[:,:,regindex,radindex]
     
-    return jkq_lst    
+    return jkq_lst 
+    
+    
+
+# Function for computing arry normalizations over the average along a specific axis 'ax', as well as the corresponding errors
+def compute_norm(arr, sigma_arr=None, ax=0):
+    # Store the input array shape and define the new array shape for arithmetic purposes
+    arrshape = np.array(arr.shape)
+    arrnewshape = np.where(arrshape!=arrshape[ax], arrshape, 1)
+    
+    # Initialize sigma_arr
+    if sigma_arr==None:
+        sigma_arr = np.zeros(arrshape)
+    
+    # Compute the normalization factors
+    norm = np.average(arr, weights = 1. / sigma_arr**2, axis=ax)
+    normerr = np.sqrt(1. / np.sum(1./sigma_arr**2, axis=ax))
+    
+    # Transform shape for arithmetical purposes, such that the normalization factor is equal for all elements along 'ax'
+    norm2, normerr2 = norm.reshape(arrnewshape), normerr.reshape(arrnewshape)
+    
+    # Normalization of input array and computation of corresponding errors
+    arr_norm = arr / norm2
+    tempErr = sigma_arr**2 + (arr**2 * normerr2**2) / norm2**2
+    arr_normErr = (1./norm2) * np.sqrt(tempErr)
+    
+    return arr_norm, arr_normErr
+    
+       
     
     
     
@@ -386,6 +408,15 @@ def plot_circle(ax, radius, xc, yc, colour='b', tag=None):
     
     ax.plot(X, Y, color=colour, label=tag)
     ax.plot(X, -1.*Y, color=colour, label=tag)
+    
+
+
+# Function for plotting a line
+def plot_line(ax, x_range, xc, yc, a, colour='b', tag=None):
+    
+        y_range = a*(x_range - xc) + yc
+        
+        ax.plot(x_range, y_range, color=colour, label=tag)
 
     
     
@@ -532,17 +563,23 @@ plotdir = "/home/bjung/Documents/Leiden_University/brp/data_red/plots"
 # Create list of directories and files within veladir
 std_dirs = [stddatadir + "/Vela1_95/CHIP1", stddatadir + "/WD1615_154/CHIP1"]
 
+# Load bias frame
+bias_header, bias = extract_data(datadir + "/masterbias.fits")
+mflat_normheader, mflat_norm = extract_data(datadir + "/masterflats/masterflat_norm_FLAT,LAM_IPOL_CHIP1.fits")
+
 # Boolean variable 
-compute_anew = False
+compute_anew = True
+
 # Pixel scale (same for all exposures)
 pixscale = 0.126 #[arcsec/pixel]
+# Conversion from ADUs to electrons
+conad = 2.18 # e / ADU
+
 # Range of aperture radii for plotting polarisation degree against aperture radius
 r_range = np.arange(1, 21, 1) #[pixel]
 # Range of retarder waveplate angles
 ret_angles = np.arange(0.0, 90.0, 22.5) #[degrees]
-# Load bias frame
-bias_header, bias = extract_data(datadir + "/masterbias.fits")
-mflat_normheader, mflat_norm = extract_data(datadir + "/masterflats/masterflat_norm_FLAT,LAM_IPOL_CHIP1.fits")
+
 # Tracks whether check circles and lines or an inset plot have to be drawn for the QvsU
 plotinset, CHECKpphi = False, [[True, True],[True, False]]
 
@@ -584,6 +621,8 @@ for i, std_dir in enumerate(std_dirs):
     # List of colors for distinguishing the B and V filter in the plots
     Bcolor_lst, b = ["#3333ff", "#3399ff", "#33ffff", "#e6ac00"], 0
     Vcolor_lst, v = ["#336600", "#66cc00", "#cccc00", "#ccff33"], 0
+    # Initiate indices for first encountered B and V exposures
+    B1ind, V1ind = None, None
     
     
     
@@ -606,29 +645,18 @@ for i, std_dir in enumerate(std_dirs):
     sigmaQUPphi_jq = np.array([ sigma_jq[:,reg_ind,rad_ind] for sigma_jq in sigmaQUPphi_jqr])
     
     
-    # Initiate QUPphi0 where phi has been corrected for instrumental offsets
+    
+    # Initiate QUPphi0 where phi is going to be corrected for instrumental offsets
     QUPphi0_jqr, sigmaQUPphi0_jqr = QUPphi_jqr, sigmaQUPphi_jqr
     QUPphi0_jq, sigmaQUPphi0_jq = QUPphi_jq, sigmaQUPphi_jq
     
     
-    # Calculation norms and corresponding errors for figure 1
+    
+    # Initiation of the FOV distances for figure 4
     listshape = OEF_jkqr[0].shape
     regsdistOE, normfluxOE_jkq, normfluxerrOE_jkq = [], [], []
-    for n in range(2):
-        # Compute distances to FOV centers for both the ordinary and extraordinary slits
-        regsdistOE.append( np.sqrt( (regions[:,0]-1034)**2 + (regions[:,n+1]-1034)**2 ) )
-        # Compute normalized fluxes
-        jkq, sigma_jkq = OEF_jkq[n], sigmaOEF_jkq[n]
-        norm_jq = np.average(jkq, weights = 1. / sigma_jkq**2, axis=1)
-        normerr_jq = np.sqrt(1. / np.sum(1./sigma_jkq**2, axis=1))
-        norm_jkq, normerr_jkq = norm_jq[:,None], normerr_jq[:,None]
-        
-        normfluxOE_jkq.append( jkq / norm_jkq )
-        temp_jkq = sigma_jkq**2 + (jkq**2 * normerr_jkq**2) / norm_jkq**2
-        normfluxerrOE_jkq.append( (1./norm_jkq) * np.sqrt(temp_jkq) )
-    normfluxOE_jkq, normfluxerrOE_jkq = np.array(normfluxOE_jkq), np.array(normfluxerrOE_jkq)
     
-        
+    
     
     # Tracks the number of skipped templates
     skips = 0
@@ -640,7 +668,7 @@ for i, std_dir in enumerate(std_dirs):
     tpl_dirlst, tpl_flst = mk_lsts(std_dir)
     tpl_dirlst = np.sort(tpl_dirlst)
     
-    
+      
     #### Plots for all templates ####  
     for J, tpl_name in enumerate(tpl_dirlst): 
         
@@ -652,11 +680,17 @@ for i, std_dir in enumerate(std_dirs):
         print("Jj:\t\t", J, j)
         
         
+        
+        # Define plot parameters 
+        filtermask = (filter_lst == filter_lst[j])  
+        mark_lst = ['o','v']
+        
         print("\t", tpl_name)
         # Select the right plot colour and correct the polarization angle for instrumental offset
         if filter_lst[j] == "b_HIGH":
             # Check whether a label should be included in the plots
             if seenB == False:
+                B1ind = j
                 lbl = "b_HIGH"
             else:
                 lbl = None
@@ -674,10 +708,11 @@ for i, std_dir in enumerate(std_dirs):
             
             seenB = True
             b += 1
-            
+        
         elif filter_lst[j] == "v_HIGH":
             # Check whether a label should be included in the plots
             if seenV == False:
+                V1ind = j
                 lbl = "v_HIGH"
             else:
                 lbl = None
@@ -696,7 +731,6 @@ for i, std_dir in enumerate(std_dirs):
             seenV = True
             v += 1
         
-        #offset = offset*2.
         
         
         # Correct for instrumental offset
@@ -705,71 +739,118 @@ for i, std_dir in enumerate(std_dirs):
         
         
         
+        
+        
+        ############## PLOT 0 ##############     
         # Plot of aperture radius vs degree of linear polarization for the standard star
         fig0 = plt.figure(0)
         ax0 = fig0.add_subplot(111)
         apRvsPl(ax0, r_range, pixscale, QUPphi0_jqr[2,j,0], sigmaQUPphi0_jqr[2,j,0], esoP=ESO_PL, esosigmaP=ESO_sigmaPL, colour=plotcolour, tag=lbl)
+        ############## PLOT 0 ##############     
         
         
-
-        # Figure 1 for the normalized ordinary and extraordinary flux rates as function of retarder waveplate angle for the standard star. Figure 2 for the cumulative counts as function of aperture radius for retarder waveplate angle = 0.    
-        filtermask = (filter_lst == filter_lst[j])  
-        mark_lst = ['o','v']
-        for n in range(2): 
-            if lbl != None:
-                if n == 0:
-                    lblfig1_2 = lbl + " O"
-                elif n == 1:
-                    lblfig1_2 = lbl + " E"
-            else:
-                lblfig1_2 = None
-                        
- 
- 
-            normflux_kq = np.average(normfluxOE_jkq[n][filtermask], weights=1./normfluxerrOE_jkq[n][filtermask]**2, axis=0)
-            normfluxerr_kq = np.sqrt(1. / np.sum(1./normfluxerrOE_jkq[n][filtermask]**2, axis=0))  
-            # Select normalized flux rates for alpha vs F plot
-            normflux_k, normfluxerr_k = normflux_kq[:,0], normfluxerr_kq[:,0]
-                   
-                   
+        
+        
+        ############## PLOT 1 ##############  
+        # Figure 1 for the normalized ordinary and extraordinary flux rates as function of retarder waveplate angle for the standard star.  
+        for n in range(2):             
             
-            # Plot the waveplate-angular normflux profile in O and E for standard star
-            plt.figure(1)
-            if filter_lst[j] == "v_HIGH":
-                theta = np.linspace(0,np.pi,100)
-                plt.plot(theta*180/np.pi/2., 1. + (-1)**n * (max(abs(normflux_k)) - 1.)*np.cos(theta*2.), color='0.3', label="")
-            plt.errorbar(ret_angles, normflux_k, yerr=normfluxerr_k, color=plotcolour, linestyle="", marker=mark_lst[n], markersize=10., label=lblfig1_2)
-            # Plot the waveplate-angular normflux profile in O and E for standard star
-            plt.figure(11)
-            if filter_lst[j] == "v_HIGH":
-                theta = np.linspace(0,np.pi,100)
-                plt.plot(theta*180/np.pi/2., 1. + (-1)**n * (max(abs(normflux_k)) - 1.)*np.cos(theta*2.), color='0.3', label="")
-            plt.errorbar(ret_angles, normflux_k, yerr=normfluxerr_k, color=plotcolour, linestyle="", marker=mark_lst[n], markersize=10., label=lblfig1_2)
+            # Plot the waveplate-angular normflux profile 2 in O and E for standard star
+            fig1 = plt.figure(1)
+            # Set labels to none after first iteration    
+            if j != B1ind and j != V1ind:
+                lblfig1 = None   
+            # Only plot retarder waveplate angles vs normalized flux for first useable template
+            if j in [B1ind, V1ind]:
+                # Assign correct colour
+                if j == B1ind:
+                    colorlstfig1 = ['b', 'c']
+                if j == V1ind:
+                    colorlstfig1 = ['g', 'y']
+                colfig1 = colorlstfig1[n]
+                
+                # Assign correct label
+                if n == 0:
+                        lblfig1 = lbl + " O"
+                if n == 1:
+                        lblfig1 = lbl + " E"
+                
+                # Initiate subplots
+                ax1 = fig1.add_subplot(211)  
+            
+                # Compute distances to FOV centers for both the ordinary and extraordinary slits
+                regsdistOE.append( np.sqrt( (regions[:,0]-1034)**2 + (regions[:,n+1]-1034)**2 ) )
+                
+                
+                                                             
+                # Normalize flux rates and errors using the mean between O and E to show the flux differences between O and E
+                normfluxOE_k, normfluxerrOE_k = compute_norm(OEF_jkq[0:2,j,:,0], 
+                                                             sigmaOEF_jkq[0:2,j,:,0], 
+                                                             ax=0)
+                
+                
+                                           
+                # Plot sine waves
+                if i == 0:
+                    m = n+1
+                if i == 1:
+                    m = n
+                theta = np.linspace(0,(80./90.)*np.pi,100)
+                avline = (np.mean(normfluxOE_k[n]) + (-1)**(m) * 
+                                (max(abs(normfluxOE_k[n])) - np.mean(normfluxOE_k[n])) * 
+                                np.cos(theta*2.))
+                ax1.plot(theta*180/np.pi/2., avline, 
+                           color=colfig1, label="")
+                           
+                           
+                # Plot mean ordinary and extraordinary lines
+                ax1.plot(theta*180/np.pi/2., np.tile(np.mean(normfluxOE_k[n]), len(theta)),
+                           color=colfig1, linestyle='--')
+                
+                # Plot flux points normalized using the mean between O and E to show the flux differences between O and E
+                ax1.errorbar(ret_angles, normfluxOE_k[n], yerr=normfluxerrOE_k[n], 
+                               color=colfig1, linestyle="", 
+                               marker=mark_lst[n], markersize=10., 
+                               label=lblfig1)             
+            ############## PLOT 1 ##############                      
+                    
         
         
-        #TODO #TODO #TODO Create function
+        
+        
+        ############## PLOT 2 ##############     
         # Import cumulative counts
-        cumc = np.sum(OEF_jkqr[0:2,j,0,0,:],axis=0), 
+        cumc = np.sum(OEF_jkqr[0:2,j,0,0,:],axis=0)
         sigma_cumc = np.sum(sigmaOEF_jkqr[0:2,j,0,0,:],axis=0)
-        skycumcs = np.sum(OEF_jkqr[0:2,j,0,-4::,:],axis=0)
-        sigma_skycumcs = np.sum(sigmaOEF_jkqr[0:2,j,0,-4::,:],axis=0)
-
+        skycumcs = np.sum(OEF_jkqr[0:2,j,0,-4::,:],axis=0) 
+        sigma_skycumcs = np.sum(sigmaOEF_jkqr[0:2,j,0,-4::,:],axis=0) 
+        
         # Correct for background flux
         skycumcAVE = np.average(skycumcs, weights=1./sigma_skycumcs**2, axis=0)
         sigma_skycumcAVE = np.sqrt(1. / np.sum(1./sigma_skycumcs**2, axis=0))
         # Convert nan to zero values
         skycumcAVE, sigma_skycumcAVE = np.nan_to_num(skycumcAVE), np.nan_to_num(sigma_skycumcAVE)
         cumccorr, sigma_cumccorr = cumc - skycumcAVE, np.sqrt(sigma_cumc**2 - sigma_skycumcAVE**2)
-        #TODO #TODO #TODO
         
-            
         # Plot cumulative counts vs aperture radius in O and E for standard star in exposure 1
-        plt.figure(2)
-        plt.errorbar(r_range, cumc, yerr=sigma_cumc, color=plotcolour, linestyle='--')
-        plt.errorbar(r_range, cumccorr, yerr=sigma_cumccorr, marker='o', color=plotcolour, label=lblfig1_2)
+        fig2 = plt.figure(2)
+        ax2 = fig2.add_subplot(111)
+        ax2.errorbar(r_range*pixscale, cumc, yerr=sigma_cumc, 
+                     color=plotcolour, linestyle='--')
+        ax2.errorbar(r_range*pixscale, cumccorr, yerr=sigma_cumccorr, 
+                     marker='o', color=plotcolour, label=lbl)  
+        plot_line(ax2, [0., pixscale*r_range[0], pixscale*r_range[1]], 
+                  pixscale*r_range[0], cumccorr[0], 
+                  a=(cumccorr[1] - cumccorr[0])/(pixscale*(r_range[1]-r_range[0])),
+                  colour=plotcolour)
+        ############## PLOT 2 ##############     
         
         
-        # U vs Q for the standard star
+        
+        
+        
+        ############## PLOT 3 ##############     
+        # U vs Q for the standard stars
         fig3 = plt.figure(3)
         ax3 = fig3.add_subplot(111)
         if i == 0:
@@ -794,9 +875,13 @@ for i, std_dir in enumerate(std_dirs):
              plot_inset=plotinset, inset_ax = axins, tag=lbl)
         axlim = PlPhi_lst[0]*3.
         ax3.set_xlim(-axlim, axlim), ax3.set_ylim(-(2./3.)*axlim, (2./3.)*axlim)
+        ############## PLOT 3 ##############     
         
         
         
+        
+        
+        ############## PLOT 4 ##############     
         # Plot linear polarization degree versus distance from FOV center for B-filter
         fig4 = plt.figure(4)
         ax4 = fig4.add_subplot(111)
@@ -807,8 +892,13 @@ for i, std_dir in enumerate(std_dirs):
         #Get the corrected text positions, then write the text
         text_positions = get_text_positions(regsdistOE[0]*pixscale, QUPphi0_jq[2,j,:], txt_width, txt_height)
         text_plotter(regsdistOE[0]*pixscale, QUPphi0_jq[2,j,:], text_positions, ax4, txt_width, txt_height)
-    
-    
+        ############## PLOT 4 ##############  
+        
+        
+           
+        
+        
+        ############## PLOT 5 ##############     
         # Vector plot showing polarization degrees of all regions (Only executed for the first exposure of the last template)
         
         #with sns.axes_style("whitegrid",{'axes.grid' : False}):
@@ -833,6 +923,10 @@ for i, std_dir in enumerate(std_dirs):
     qk = ax5.quiverkey(Q, 0.15, 0.9, 5e-2, r'$5\%$ polarization', labelpos='N',
                        coordinates='figure', fontproperties={"size": 15})
     plt.colorbar(image)
+    ############## PLOT 5 ##############  
+    
+    
+       
 
     
     # Check if the savefile directory is present
@@ -841,6 +935,7 @@ for i, std_dir in enumerate(std_dirs):
         os.chdir(plotdir)
         os.makedirs(savedir)
         os.chdir(stddatadir)
+    
     
     plt.figure(0)
     plt.grid()
@@ -851,20 +946,27 @@ for i, std_dir in enumerate(std_dirs):
     plt.savefig(savedir + '/' + 'RvsPl_alltplsV2')
     
     
-    plt.figure(1)     
-    plt.axis(xmin=0, xmax=91)
-    plt.grid()
-    plt.xlabel(r'$\alpha \mathrm{\ [^{\circ}]}$', fontsize=20)
-    plt.ylabel(r'$F \mathrm{\ [-]}$', fontsize=20)
-    plt.legend(loc = 'best')
-    plt.tight_layout()
-    plt.savefig(savedir + '/' + 'alpha_F')  
+    plt.figure(1)
+    # Set axes labels
+    ax1.set_xlabel(r'$\alpha \mathrm{\ [^{\circ}]}$', fontsize=16)
+    ax1.set_ylabel(r'Normalized flux $\mathrm{\ [-]}$', fontsize=16)
+    # Set grods and x ranges
+    ax1.set_xlim(xmin=0, xmax=109)
+    ax1.xaxis.grid(True), ax1.yaxis.grid(True)
+    # Set legends
+    ax1.legend(loc="right")
+    # Set titles
+    fig1.suptitle("Angular profile of normalized flux rates", fontsize=24)
+    # Save plot 
+    fig1.tight_layout()
+    fig1.subplots_adjust(top=0.88)
+    plt.savefig(savedir + '/' + 'alpha_F') 
     
-
+        
     plt.figure(2)      
     plt.grid()
     plt.xlabel(r'Aperture Radius [arcsec]', fontsize=20)
-    plt.ylabel(r'Counts [-]', fontsize=20)
+    plt.ylabel(r'Counts [ADU]', fontsize=20)
     plt.legend(loc = 'best')
     plt.tight_layout()
     plt.savefig(savedir + '/' + 'CumCounts')
@@ -876,16 +978,16 @@ for i, std_dir in enumerate(std_dirs):
     plt.ylabel(r'$\frac{U}{I} \mathrm{\ [-]}$', fontsize=20)
     plt.legend(loc = 'upper left')
     plt.tight_layout()
-    plt.savefig(savedir + '/' + 'UvsQ_2')
+    plt.savefig(savedir + '/' + 'UvsQ')
     
-
+    
     plt.figure(4)  
     plt.grid()
     plt.xlabel(r'Radial distance [arcsec]', fontsize=20)
     plt.ylabel(r'Degree of linear polarization [-]', fontsize=20)
     plt.legend(loc = 'best')
     plt.tight_layout()
-    plt.savefig(savedir + '/' + 'radialprofile')    
+    plt.savefig(savedir + '/' + 'radialprofile')
     
     
     plt.figure(5)
@@ -895,14 +997,14 @@ for i, std_dir in enumerate(std_dirs):
     plt.ylabel(r'Y [arcsec]', fontsize=20)
     plt.legend(loc = 'best')
     plt.tight_layout()
-    plt.savefig(savedir + '/' + 'polprofile')   
+    plt.savefig(savedir + '/' + 'polprofile')
     
     
     # Show and close figures
     plt.show()
-    plt.close(0), plt.close(1), plt.close(2), plt.close(3), plt.close(4), plt.close(5)
-
-
+    plt.close()
+    
+    
     
     # Create tables
     savedir = std_dir.split("/CHIP1")[0] + "/tables"
