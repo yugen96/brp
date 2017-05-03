@@ -24,11 +24,11 @@ from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 # Returns a list will all subdirectories in a specific folder as well as the
 # contained files
 def mk_lsts(dir_name):
-
+    
     #dir_lst = [dirs[0] for dirs in os.walk(dir_name)]
     dir_lst = next(os.walk(dir_name))[1]
     file_lst = next(os.walk(dir_name))[2]
-    return dir_lst, file_lst
+    return np.array(dir_lst), np.array(file_lst)
 
 
 
@@ -99,15 +99,15 @@ def find_center(coord, data_array, window_size):
                 
             
     
-# Function which calculates the aperture count rate for a star centered at pixel coordinates [px, py] for an aperture radius r
-def apersum(image, px, py, r, an_r):
+# Function which calculates the aperture count rate for a star centered at pixel coordinates [px, py] for an aperture radius r. The parameters minAn_r and maxAn_r define the inner and outer radii of the sky annulus.
+def apersum(image, px, py, r, minAn_r, maxAn_r):
     
     
     # Determine the shape of the array
     ny, nx = image.shape
     # Determine the aperture limits
-    x_min, x_max = max(1, px - an_r), min(nx, px + an_r)
-    y_min, y_max = max(1, py - an_r), min(ny, py + an_r)
+    x_min, x_max = max(1, px - maxAn_r), min(nx, px + maxAn_r)
+    y_min, y_max = max(1, py - maxAn_r), min(ny, py + maxAn_r)
 
     
     # Compute the total count rate within the aperture and annulus
@@ -129,7 +129,7 @@ def apersum(image, px, py, r, an_r):
                 apsum += pixval
                 # Count number of pixels in aperture
                 apcount += 1
-            elif (d2 >= r**2) and (d2 <= an_r**2):
+            elif (d2 >= minAn_r**2) and (d2 <= maxAn_r**2):
                 ansum += pixval
                 ansum2 += pixval**2
                 # Count number of pixels in annulus
@@ -159,7 +159,8 @@ def apersum(image, px, py, r, an_r):
                 # Store the current pixel's count value
                 pixval = image[j-1,i-1]
                 
-                if ((d2 >= r**2) and (d2 <= an_r**2)) and (abs(pixval - av_an) <= 2.*sigma_an):
+                if ( ((d2 >= minAn_r**2) and (d2 <= maxAn_r**2)) 
+                                         and (abs(pixval - av_an) <= 2.*sigma_an) ):
                     ansum += pixval
                     ansum2 += pixval**2
                     # Count number of pixels in annulus
@@ -185,9 +186,12 @@ def compute_fluxlsts(data_dirs, bias, masterflat_norm, loc_lsts, r_range):
         print("\n\n\n{}".format(data_dir))
         
         
-        # Create a list with all the template directories within data_dirs
-        tpl_dirlst, tpl_flst = mk_lsts(data_dir)
-        tpl_dirlst = np.sort(tpl_dirlst)
+        # Create a list with all the template directories within data_dir
+        [tpl_dirlst, tpl_flst] = mk_lsts(data_dir)
+        tplnamemask = np.array([(len(tpl_name) < 5) for tpl_name in tpl_dirlst])
+        tpl_dirlst = np.concatenate( (np.sort(tpl_dirlst[tplnamemask]), 
+                                      np.sort(tpl_dirlst[np.logical_not(tplnamemask)])) )
+        tpl_dirlst = np.delete(tpl_dirlst, np.argwhere(tpl_dirlst=="appended"))
 
         # A 1D lst for storing the exposures containing the least amount of stars per template
         least_expnos = np.zeros(len(tpl_dirlst), dtype=np.int64) 
@@ -204,16 +208,19 @@ def compute_fluxlsts(data_dirs, bias, masterflat_norm, loc_lsts, r_range):
             print("\n\n\t {}".format(tpl_name))     
             tpl_dir = data_dir + '/' + tpl_name
             
-            # Skip 'appended' subdirectory
-            if tpl_name == "appended":
-                continue
             
             # Create a list with filenames of files stored within tpldir
             expdir_lst, expfile_lst = mk_lsts(tpl_dir)
             expfile_lst = np.sort(expfile_lst)
             
             # Initial setting for the least amount of detected stars within the template
-            N_stars = 1e18            
+            N_stars = 1e18        
+            
+            
+            # Skip 'appended' subdirectory
+            if (tpl_name == "appended") or (len(expfile_lst) != 4):
+                print("\t\t skipped")
+                continue
             
             
             # Initiate first sublists for distinguishing different exposures
@@ -222,84 +229,94 @@ def compute_fluxlsts(data_dirs, bias, masterflat_norm, loc_lsts, r_range):
             F_1lst, sigmaF_1lst = [], []
             for k, f in enumerate(expfile_lst):
                 print("\n\t\t {}".format(f))
+                
+                
+                # Skip non-fits files
+                if not f.endswith(".fits"):
+                    print("\t\t\t skipped")
+                    continue 
+                
+                
+                header, data = extract_data(tpl_dir + '/' + f)
+                # Subtract bias
+                data = data - bias
+                data = data / masterflat_norm
+                # Save corrected image
+                savedir = tpl_dir + "/corrected2" 
+                if not os.path.exists(savedir):
+                    os.makedirs(savedir)
+                elif os.path.exists(savedir) and k==0:
+                    shutil.rmtree(savedir)
+                    os.makedirs(savedir)
+                hdu = fits.PrimaryHDU(data)
+                hdulist = fits.HDUList([hdu])
+                hdulist.writeto(savedir + '/' + f.split(".fits")[0] + "_COR.fits")
 
-                if (f.endswith("fits")) and (len(expfile_lst) == 4):
-                    header, data = extract_data(tpl_dir + '/' + f)
-                    # Subtract bias
-                    data = data - bias
-                    data = data / masterflat_norm
-                    # Save corrected image
-                    savedir = tpl_dir + "/corrected2" 
-                    if not os.path.exists(savedir):
-                        os.makedirs(savedir)
-                    elif os.path.exists(savedir) and k==0:
-                        shutil.rmtree(savedir)
-                        os.makedirs(savedir)
-                    hdu = fits.PrimaryHDU(data)
-                    hdulist = fits.HDUList([hdu])
-                    hdulist.writeto(savedir + '/' + f.split(".fits")[0] + "_COR.fits")
 
-
-           
-                    # Specify observation parameters
-                    expno = header["HIERARCH ESO TPL EXPNO"]
-                    filt_name = header["HIERARCH ESO INS FILT1 NAME"]
-                    filt_id = header["HIERARCH ESO INS FILT1 ID"]
-                    ret_angle = header["HIERARCH ESO INS RETA2 POSANG"] * np.pi / 180. #rad
-                    woll_angle = header["HIERARCH ESO INS WOLL POSANG"] * np.pi / 180. #rad
-                    print("\t\t\t\tFILTER_ID: {A}; \t FILTER_NAME: {B}".format(A=filt_id, B = filt_name))
-                    print("\t\t\t\tWollangle: {A}; \t Retangle: {B}".format(A=woll_angle, B = np.round(ret_angle, 2)))                
+       
+                # Specify observation parameters
+                expno = header["HIERARCH ESO TPL EXPNO"]
+                filt_name = header["HIERARCH ESO INS FILT1 NAME"]
+                filt_id = header["HIERARCH ESO INS FILT1 ID"]
+                ret_angle = header["HIERARCH ESO INS RETA2 POSANG"] * np.pi / 180. #rad
+                woll_angle = header["HIERARCH ESO INS WOLL POSANG"] * np.pi / 180. #rad
+                print("\t\t\t\tFILTER_ID: {A}; \t FILTER_NAME: {B}".format(A=filt_id, B = filt_name))
+                print("\t\t\t\tWollangle: {A}; \t Retangle: {B}".format(A=woll_angle, B = np.round(ret_angle, 2)))                
+                
+                
+                
+                # Initiate second sublist of F for distinguishing between different stars within the current exposure
+                O_2lst, sigmaO_2lst = [], []
+                E_2lst, sigmaE_2lst = [], []
+                F_2lst, sigmaF_2lst = [], []
+                for q, coord in enumerate(loc_lsts[i]):
+                    # Finds the central pixel of the selected stars within the specific exposure                    
+                    coord1, coord2 = coord[0:2], [coord[0],coord[2]]
+                    center1 = find_center(coord1, data, 15) #TODO TODO NOTE: NO SKY APERTURES!
+                    center2 = find_center(coord2, data, 15)
+                    centers = [center1, center2]
                     
                     
+                    # Initiate third sublist of F for distinguishing between different aperture radii
+                    O_3lst, sigmaO_3lst = [], []
+                    E_3lst, sigmaE_3lst = [], []
+                    F_3lst, sigmaF_3lst = [], [] 
+                    for l, R in enumerate(r_range):
                     
-                    # Initiate second sublist of F for distinguishing between different stars within the current exposure
-                    O_2lst, sigmaO_2lst = [], []
-                    E_2lst, sigmaE_2lst = [], []
-                    F_2lst, sigmaF_2lst = [], []
-                    for q, coord in enumerate(loc_lsts[i]):
-                        # Finds the central pixel of the selected stars within the specific exposure                    
-                        coord1, coord2 = coord[0:2], [coord[0],coord[2]]
-                        center1 = find_center(coord1, data, 15) #TODO TODO NOTE: NO SKY APERTURES!
-                        center2 = find_center(coord2, data, 15)
-                        centers = [center1, center2]
+                        # Lists for temporary storage of aperture sum values and corresponding shotnoise levels
+                        apsum_lst, shotnoise_lst = [], []
+                        for center in centers:
+                            
+                            # Define sky annulus inner and outer radii
+                            minRan, maxRan = int(1.15*coord[3]), int(1.5*coord[3])
+                            # Compute cumulative counts within aperture
+                            apsum = apersum(data, center[0], center[1], 
+                                            R, minRan, maxRan)
+                            apsum_lst.append(apsum)
+                            # Compute photon shot noise within aperture 
+                            shotnoise = np.sqrt(apsum)
+                            shotnoise_lst.append(shotnoise)
+                        
+                        # Compute normalised flux differences for current aperture size
+                        F, sigmaF = fluxdiff_norm(apsum_lst[1], apsum_lst[0], 
+                                                  shotnoise_lst[1], shotnoise_lst[0]) 
                         
                         
-                        # Initiate third sublist of F for distinguishing between different aperture radii
-                        O_3lst, sigmaO_3lst = [], []
-                        E_3lst, sigmaE_3lst = [], []
-                        F_3lst, sigmaF_3lst = [], [] 
-                        for l, R in enumerate(r_range):  
-
-                            # Lists for temporary storage of aperture sum values and corresponding shotnoise levels
-                            apsum_lst, shotnoise_lst = [], []
-                            for center in centers:
-                            
-                                # Compute cumulative counts within aperture
-                                apsum = apersum(data, center[0], center[1], 
-                                                R, round((4./3.)*coord[3]))
-                                apsum_lst.append(apsum)
-                                # Compute photon shot noise within aperture 
-                                shotnoise = np.sqrt(apsum)
-                                shotnoise_lst.append(shotnoise)
-                            
-                            # Compute normalised flux differences for current aperture size
-                            F, sigmaF = fluxdiff_norm(apsum_lst[1], apsum_lst[0], 
-                                                      shotnoise_lst[1], shotnoise_lst[0]) 
-                            
-                            
-                            
-                            # Append results to third sublist
-                            O_3lst.append(apsum_lst[1]), sigmaO_3lst.append(shotnoise_lst[1])
-                            E_3lst.append(apsum_lst[0]), sigmaE_3lst.append(shotnoise_lst[0])
-                            F_3lst.append(F), sigmaF_3lst.append(sigmaF)
-                        # Append the third sublist to the second sublist
-                        O_2lst.append(O_3lst), sigmaO_2lst.append(sigmaO_3lst)
-                        E_2lst.append(E_3lst), sigmaE_2lst.append(sigmaE_3lst)
-                        F_2lst.append(F_3lst), sigmaF_2lst.append(sigmaF_3lst)
+                        
+                        # Append results to third sublist
+                        O_3lst.append(apsum_lst[1]), sigmaO_3lst.append(shotnoise_lst[1])
+                        E_3lst.append(apsum_lst[0]), sigmaE_3lst.append(shotnoise_lst[0])
+                        F_3lst.append(F), sigmaF_3lst.append(sigmaF)
+                    # Append the third sublist to the second sublist
+                    O_2lst.append(O_3lst), sigmaO_2lst.append(sigmaO_3lst)
+                    E_2lst.append(E_3lst), sigmaE_2lst.append(sigmaE_3lst)
+                    F_2lst.append(F_3lst), sigmaF_2lst.append(sigmaF_3lst)
                 # Append second sublist to first sublist
                 O_1lst.append(O_2lst), sigmaO_1lst.append(sigmaO_2lst)
                 E_1lst.append(E_2lst), sigmaE_1lst.append(sigmaE_2lst)
                 F_1lst.append(F_2lst), sigmaF_1lst.append(sigmaF_2lst)
+            if len(O_1lst) != 4:
+                print("JU LEE, DO THE THING!!!!!")
             # Append first sublist to main list 
             O_0lst.append(O_1lst), sigmaO_0lst.append(sigmaO_1lst)
             E_0lst.append(E_1lst), sigmaE_0lst.append(sigmaE_1lst)
@@ -311,8 +328,9 @@ def compute_fluxlsts(data_dirs, bias, masterflat_norm, loc_lsts, r_range):
         E_0lst, sigmaE_0lst = np.array(E_0lst), np.array(sigmaE_0lst)
         F_0lst, sigmaF_0lst = np.array(F_0lst), np.array(sigmaF_0lst) 
         
+        
         # Save the flux arrays
-        savedir = data_dir.rsplit("/",2)[0] + "/loadfiles/" + data_dir.rsplit("/",2)[1]
+        savedir = data_dir.rsplit("/sorted")[0] + "/sorted/loadfiles/" + data_dir.rsplit("/",2)[1]
         if not os.path.exists(savedir):
             os.makedirs(savedir)
         np.save(savedir + "/O_0lst.npy", O_0lst), np.save(savedir + "/sigmaO_0lst.npy", sigmaO_0lst)
@@ -689,50 +707,340 @@ def append_slits(slitdata, pixoffs=np.zeros(5)):
 
 
 # Specify data and filename
-currdir = os.getcwd()
-datadir = [currdir + "/NGC4696,IPOL/CHIP1"]
+datadir = "/home/bjung/Documents/Leiden_University/brp/data_red/calib_data"
+scidatadir = datadir + "/sorted/NGC4696,IPOL"
+sci_dirs = [scidatadir + "/CHIP1"]
 testdata = datadir[0] + "/tpl8/FORS2.2011-05-04T01:31:46.334.fits"
+# Directory for saving plots
+plotdir = "/home/bjung/Documents/Leiden_University/brp/data_red/plots"
 
 # Specify bias and masterflat
-os.chdir("..")
-CALdir = os.getcwd()
-header, Mbias = extract_data(CALdir + "/masterbias.fits")
-header, Mflat_norm = extract_data(CALdir + "/masterflats/masterflat_norm_FLAT,LAM_IPOL_CHIP1.fits")
-os.chdir(currdir)
+header, Mbias = extract_data(datadir + "/masterbias.fits")
+header, Mflat_norm = extract_data(datadir + "/masterflats/masterflat_norm_FLAT,LAM_IPOL_CHIP1.fits")
+
+
+
+# Aproximate coordinates of selection of stars within CHIP1 of 'Vela1_95' and 'WD1615_154'. Axis 0 specifiec the different sci_dirs; axis 1 specifies the different stars within the sci_dirs; axis 2 specifies the x, y1, y2 coordinate of the specific star (with y1 specifying the y coordinate on the upper slit and y2 indicating the y coordinate on the lower slit) and the aproximate stellar radius. NOTE: THE LAST LIST WITHIN AXIS1 IS A SKY APERTURE!!!
+star_lsts = [[[335, 904, 807, 5], [514, 869, 773, 7], [1169, 907, 811, 5], [1383, 878, 782, 7], 
+              [341, 694, 599, 10], [370, 702, 607, 11], [362, 724, 630, 5], [898, 709, 609, 8], 
+              [1630, 721, 626, 5], [1836, 707, 611, 6], [227, 523, 429, 6], [343, 492, 399, 5], 
+              [354, 494, 400, 12], [373, 520, 413, 8], [537, 491, 392, 7], [571, 541, 446, 8], 
+              [1096, 510, 416, 5], [1179, 530, 436, 8], [487, 320, 226, 7], [637, 331, 238, 6], 
+              [1214, 345, 252, 6], [1248, 326, 233, 6], [1663, 308, 217, 9], [326, 132, 40, 5], 
+              [613, 186, 94, 10], [634, 184, 91, 9], [642, 134, 41, 7], [838, 175, 82, 8], 
+              [990, 140, 48, 11], [1033, 157, 65, 9], [1172, 147, 55, 7], [1315, 164, 71, 8], 
+              [1549, 164, 72, 13]]] 
+star_lsts = np.array(star_lsts) # 35 stars in total (42-7)
+
+
 
 # Range of aperture radii
-r_range = np.arange(1, 21, 1)
+r_range = np.arange(1, np.max(star_lsts[:,:,3])+1) #[pixels]
+
+# Pixel scale
+pixscale = 0.126 #[arcsec/pixel]
 
 # Boolean variable for switchin on polarization computations of selected stars
 compute_anew = True
 
-
-
-# Aproximate coordinates of selection of stars within CHIP1 of 'Vela1_95' and 'WD1615_154'. Axis 0 specifiec the different datadirs; axis 1 specifies the different stars within the datadirs; axis 2 specifies the x, y1, y2 coordinate of the specific star (with y1 specifying the y coordinate on the upper slit and y2 indicating the y coordinate on the lower slit) and the aproximate stellar radius. NOTE: THE LAST LIST WITHIN AXIS1 IS A SKY APERTURE!!!
-star_lsts = [[[335, 904, 807, 5], [514, 869, 773, 7], [964, 921, 825, 5], [1169, 907, 811, 5],
-             [1383, 878, 782, 7], [1757, 924, 827, 5], [341, 694, 599, 10], [370, 702, 607, 11],
-             [362, 724, 630, 5], [898, 709, 609, 8], [1630, 721, 626, 5], [1836, 707, 611, 6],
-             [227, 523, 429, 6], [343, 492, 399, 5], [354, 494, 400, 12], [373, 520, 413, 8], 
-             [537, 491, 392, 7], [571, 541, 446, 8], [1096, 510, 416, 5], [1179, 530, 436, 8], 
-             [487, 320, 226, 7], [637, 331, 238, 6], [1214, 345, 252, 6], [1248, 326, 233, 6], 
-             [1663, 308, 217, 9], [326, 132, 40, 5], [613, 186, 94, 10], [634, 184, 91, 9], 
-             [642, 134, 41, 7], [838, 175, 82, 8], [990, 140, 48, 11], [1033, 157, 65, 9], 
-             [1172, 147, 55, 7], [1315, 164, 71, 8], [1549, 164, 72, 13]]] # 35 stars in total (42-7)
+# ESO given polarizations
+VelaBV_PlPhi = [[0., 0.],[0., 0.]] # [-], [deg]
+VelaBV_sigmaPlPhi = [[0., 0.],[0., 0.]] # [-], [deg]
+WD1615BV_PlPhi, WD1615BV_sigmaPlPhi = [[0., None], [0., None]], [[0., None], [0., None]]
+ESObvPLPHI = np.array([VelaBV_PlPhi, WD1615BV_PlPhi]) 
+sigmaESObvPLPHI = np.array([VelaBV_sigmaPlPhi, WD1615BV_sigmaPlPhi])
 
 
 
 # Compute fluxes and polarizations for selected stars in testdata and carry out slit appenditure
 if compute_anew == True:
-    compute_fluxlsts(datadir, Mbias, Mflat_norm, star_lsts, r_range)
+    compute_fluxlsts(sci_dirs, Mbias, Mflat_norm, star_lsts, r_range)
 
 # Load flux lists and filter list for plots
-loaddir = datadir + "/loadfiles/" + datadir.split("/")[-2]
+loaddir = sci_dirs[0].rsplit("/sorted")[0] + "/sorted/loadfiles/" + sci_dirs[0].rsplit("/",2)[1]
 OEF_jkqr, sigmaOEF_jkqr, filter_lst = load_lsts(loaddir)
 
 
 
+# Create plots
+for i, sci_dir in enumerate(sci_dirs):
+    print(sci_dir.split("/")[-2])
+    
+    loaddir = sci_dir.rsplit("/",2)[0] + "/loadfiles/" + sci_dir.rsplit("/",2)[1]
+    regions = np.array(star_lsts[i])
+    ESO_BV_PlPhi, ESO_BV_sigmaPlPhi = ESObvPLPHI[i], sigmaESObvPLPHI[i]
+    
+    
+    
+    # Indices for selecting the aperture radii corresponding to each star
+    reg_ind, rad_ind = np.arange(0, len(regions), 1), regions[:,3]-1
+    std_rad = rad_ind[0]+1
+    # List of colors for distinguishing the B and V filter in the plots
+    Bcolor_lst, b = np.tile('b', 14), 0
+    Vcolor_lst, v = np.tile('v', 14), 0
+    # Initiate indices for first encountered B and V exposures
+    B1ind, V1ind = None, None
+    
+    
+    
+    # Load flux lists and filter list for plots
+    OEF_jkqr, sigmaOEF_jkqr, filter_lst = load_lsts(loaddir)
+    OEF_jkqr, sigmaOEF_jkqr = np.nan_to_num(OEF_jkqr), np.nan_to_num(sigmaOEF_jkqr)
+    '''
+    # Set NAN values to 0
+    OEF_jkqr = np.where(OEF_jkqr >= 0., OEF_jkqr, 0.)
+    sigmaOEF_jkqr = np.where(sigmaOEF_jkqr >= 0., sigmaOEF_jkqr, 0.)
+    '''
+    # Select correct aperture radii for each region
+    OEF_jkq = np.array([ jkqr[:,:,reg_ind,rad_ind] for jkqr in OEF_jkqr])
+    sigmaOEF_jkq = np.array([ sigma_jkqr[:,:,reg_ind,rad_ind] for sigma_jkqr in sigmaOEF_jkqr])
+    
+        
+    # Compute Stokes Q and U as well as the linear polarization degree and angle and all corresponding error margins
+    QUPphi_jqr, sigmaQUPphi_jqr = compute_pol(OEF_jkqr[2], sigmaOEF_jkqr[2])
+    # Select correct aperture radii for each region
+    QUPphi_jq = np.array([ jkqr[:,reg_ind,rad_ind] for jkqr in QUPphi_jqr])
+    sigmaQUPphi_jq = np.array([ sigma_jq[:,reg_ind,rad_ind] for sigma_jq in sigmaQUPphi_jqr])
+    
+    
+    
+    # Initiate QUPphi0 where phi is going to be corrected for instrumental offsets
+    QUPphi0_jqr, sigmaQUPphi0_jqr = QUPphi_jqr, sigmaQUPphi_jqr
+    QUPphi0_jq, sigmaQUPphi0_jq = QUPphi_jq, sigmaQUPphi_jq
+    
+    
+    
+    # Initiation of the FOV distances for figure 4
+    listshape = OEF_jkqr[0].shape
+    regsdistOE, normfluxOE_jkq, normfluxerrOE_jkq = [], [], []
+    
+    
+    
+    # Tracks the number of skipped templates
+    skips = 0
+    # Boolean for checking when the first v_HIGH and b_HIGH filter are iterated through
+    seenB, seenV = False, False
+    
+    
+    # Create a list with all the template directories within sci_dirs
+    [tpl_dirlst, tpl_flst] = mk_lsts(sci_dir)
+    tplnamemask = np.array([(len(tpl_name) < 5) for tpl_name in tpl_dirlst])
+    tpl_dirlst = np.concatenate( (np.sort(tpl_dirlst[tplnamemask]), 
+                                  np.sort(tpl_dirlst[np.logical_not(tplnamemask)])) )
+    tpl_dirlst = np.delete(tpl_dirlst, np.argwhere(tpl_dirlst=="appended"))
+    
+      
+    #### Plots for all templates ####  
+    for J, tpl_name in enumerate(tpl_dirlst): 
+        print("\t", tpl_name)
+        tpl_dir = sci_dir + '/' + tpl_name
+        
 
+        # Create a list with filenames of files stored within tpldir
+        expdir_lst, expfile_lst = mk_lsts(tpl_dir)
+            
+                    
+        # Skip 'appended' subdirectory
+        if (tpl_name == "appended") or (len(expfile_lst) != 4):
+            print("\t\t skipped")
+            skips += 1
+            continue
+        j = J-skips
+        
+        
+        # Define plot parameters 
+        filtermask = (filter_lst == filter_lst[j])  
+        mark_lst = ['o','v']
+        
+        
+        # Select the right plot colour and correct the polarization angle for instrumental offset
+        if filter_lst[j] == "b_HIGH":
+            # Check whether a label should be included in the plots
+            if seenB == False:
+                B1ind = j
+                lbl = "b_HIGH"
+            else:
+                lbl = None
+            # Select plot colour
+            plotcolour = 'b'
+            colour2 = Bcolor_lst[b]
+            # Instrumental offset angle
+            if i==0:
+                offset = 1.54*2. # deg
+            elif i==1:
+                offset = 0. # deg
+            # Select correct ESO given polarizations
+            ESO_PL, ESO_PHI = ESO_BV_PlPhi[0,0], ESO_BV_PlPhi[0,1]
+            ESO_sigmaPL, ESO_sigmaPHI = ESO_BV_sigmaPlPhi[0,0], ESO_BV_sigmaPlPhi[0,1]
+            
+            seenB = True
+            b += 1
+        
+        elif filter_lst[j] == "v_HIGH":
+            # Check whether a label should be included in the plots
+            if seenV == False:
+                V1ind = j
+                lbl = "v_HIGH"
+            else:
+                lbl = None
+            # Select plot colour
+            plotcolour = 'g'
+            colour2 = Vcolor_lst[v]
+            # Instrumental offset angle
+            if i==0:
+                offset = 1.8*2. # deg
+            elif i==1:
+                offset = 0. #deg
+            # Select correct ESO given polarizations
+            # Select correct ESO given polarizations
+            ESO_PL, ESO_PHI = ESO_BV_PlPhi[1,0], ESO_BV_PlPhi[1,1]
+            ESO_sigmaPL, ESO_sigmaPHI = ESO_BV_sigmaPlPhi[1,0], ESO_BV_sigmaPlPhi[1,1]
+            
+            seenV = True
+            v += 1
+        
+        
+        
+        # Correct for instrumental offset
+        QUPphi0_jq = np.where(QUPphi_jq != QUPphi_jq[3,j,0], QUPphi0_jq, QUPphi0_jq - offset)
+        QUPphi0_jqr = np.where(QUPphi_jqr != QUPphi_jqr[3,j,0,:], QUPphi0_jqr, QUPphi0_jqr - offset)
+        
+        
+        
+        
+        
+        ############## PLOT 0 ##############     
+        # Plot of aperture radius vs degree of linear polarization for the standard star
+        fig0 = plt.figure(0)
+        ax0 = fig0.add_subplot(111)
+        print(np.mean(QUPphi0_jqr[2,j,30]))
+        if np.mean(QUPphi0_jqr[2,j,30]) > 0.2:
+            print("POEPIEEK:\t\t{}".format(tpl_name))
+            plotcolour2 = 'r' #TODO TODO TODO SKIPPED TEMPLATE 5
+        else:
+            plotcolour2 = plotcolour
+            apRvsPl(ax0, r_range, pixscale, 
+                QUPphi0_jqr[2,j,30], sigmaQUPphi0_jqr[2,j,30], 
+                colour=plotcolour2, tag=lbl)
+        ############## PLOT 0 ##############
+        
+        
+        
+        
+        
+        ############## PLOT 5 ##############     
+        # Vector plot showing polarization degrees of all regions (Only executed for the first exposure of the last template)
+        
+        #with sns.axes_style("whitegrid",{'axes.grid' : False}):
+        fig5 = plt.figure(5)
+        ax5 = fig5.add_subplot(111)
+        # Load image
+        vecplotdir = sci_dir + '/' + tpl_name + '/corrected2/'
+        datadirs, datafiles = mk_lsts(vecplotdir)
+        header, datacor = extract_data(vecplotdir + datafiles[0])
+        # Compute vectors
+        vectorX, vectorY = regions[:,0], regions[:,1]
+        vectorU = QUPphi0_jq[2,j,:] * np.cos(QUPphi0_jq[3,j,:]*np.pi/180.)
+        vectorV = QUPphi0_jq[2,j,:] * np.sin(QUPphi0_jq[3,j,:]*np.pi/180.)
+        M = np.hypot(vectorU, vectorV)
+        # Plot image
+        norm = ImageNormalize(stretch=SqrtStretch())
+        image = ax5.imshow(np.log(datacor), cmap='afmhot', origin='lower', norm=norm)
+        ##########plt.colorbar(image)
+        # Plot vectors
+        Q = ax5.quiver(vectorX, vectorY, 
+                       vectorU, vectorV, 
+                       M, units='inches', pivot='mid')
+                       #color = '#666699')
+    qk = ax5.quiverkey(Q, 0.15, 0.9, 5e-2, r'$5\%$ polarization', labelpos='N',
+                       coordinates='figure', fontproperties={"size": 15})
+    plt.colorbar(image)
+    ############## PLOT 5 ##############  
+    
+    
+       
 
+    
+    # Check if the savefile directory is present
+    savedir = plotdir + '/' + sci_dir.split("/")[-2]
+    if not os.path.exists(savedir):
+        os.chdir(plotdir)
+        os.makedirs(savedir)
+        os.chdir(scidatadir)
+    
+    
+    plt.figure(0)
+    plt.grid()
+    plt.xlabel(r'$\mathrm{Radius \ [arcsec]}$', fontsize=20)
+    plt.ylabel(r'$\mathrm{Degree \ of \ linear \ polarization \ [-]}$', fontsize=20)
+    plt.legend(loc = 'best')
+    plt.tight_layout()
+    plt.savefig(savedir + '/' + 'RvsPl_alltplsV2')
+    
+        
+    
+    plt.figure(5)
+    x_tickrange, y_tickrange = np.arange(0,2038,200), np.arange(1000,-1,-100)
+    plt.xticks(x_tickrange, (x_tickrange-1000)*pixscale), plt.yticks(y_tickrange,  (y_tickrange-500)*pixscale)
+    plt.xlabel(r'X [arcsec]', fontsize=20)
+    plt.ylabel(r'Y [arcsec]', fontsize=20)
+    plt.legend(loc = 'best')
+    plt.tight_layout()
+    plt.savefig(savedir + '/' + 'polprofile')
+    
+    
+    # Show and close figures
+    plt.show()
+    plt.close()
+    
+    
+    '''
+    # Create tables
+    savedir = std_dir.split("/CHIP1")[0] + "/tables"
+    if not os.path.exists(savedir):
+        os.makedirs(savedir)
+    
+    os.chdir(savedir)                
+    savefile1 = open("tables1_{}".format(std_dir.split("/")[-2]),'w')
+    savefile1.write("ID \t&\t X \t&\t Y1 \t&\t Y2 \t&\t PixDist \t&\t AperRad \\\\ \n")
+    savefile1.write("\\hline \n")    
+    
+    savefile2 = open("tables2_{}".format(std_dir.split("/")[-2]),'w')
+    savefile2.write("ID \t&\t Counts \t&\t Noise \\\\ \n")
+    savefile2.write("\\hline \n")
+    
+    savefile3 = open("tables3_{}".format(std_dir.split("/")[-2]),'w')
+    savefile3.write("ID \t&\t Q/I \t&\t $Q_{err}$ \\\\ \n")
+    savefile3.write("\\hline \n")
+    
+    savefile4 = open("tables4_{}".format(std_dir.split("/")[-2]),'w')
+    savefile4.write("ID \t&\t U/I \t&\t $U_{err}$ \\\\ \n")
+    savefile4.write("\\hline \n")
+    
+    savefile5 = open("tables5_{}".format(std_dir.split("/")[-2]),'w')
+    savefile5.write("ID \t&\t $P_l$ \t&\t $P_{l_{err}}$ \\\\ \n")
+    savefile5.write("\\hline \n")
+    
+    savefile6 = open("tables6_{}".format(std_dir.split("/")[-2]),'w')
+    savefile6.write("ID \t&\t $\phi_0$ \t&\t $\phi_{0_{err}}$ \\\\ \n")
+    savefile6.write("\\hline \n")
+    
+    for q, coords in enumerate(regions):
+        if not ((q==0) or (q in np.arange(len(regions)-4,len(regions),1))):
+            continue
+        savefile1.write("{A} \t&\t {B1} \t&\t {B2} \t&\t {B3} \t&\t {C} \t&\t {D} \\\\ \n".format(A=q+1, B1=coords[0], B2=coords[1], B3=coords[2], C=[np.sum(coords[0:2]**2),coords[0]**2+coords[2]**2], D=coords[3]))
+        
+        savefile2.write("{A1} \t&\t {E1} \t&\t {E2} \\\\ \n {A2}.1 \t&\t {E11} \t&\t {E21}\\\\ \n".format(A1=q+1, A2=q+1, E1=np.round(list(OEF_jkq[0,:,0,q]),2), E11=np.round(list(OEF_jkq[1,:,0,q]),2), E2=np.round(list(sigmaOEF_jkq[0,:,0,q]),2), E21=np.round(list(sigmaOEF_jkq[1,:,0,q]),2)))
+        
+        savefile3.write("{A} \t&\t {F1} \t&\t {F2} \\\\ \n".format(A=q+1, F1=np.round(QUPphi0_jq[0,:,q],3), F2=np.round(sigmaQUPphi0_jq[0,:,q],3)))
+        
+        savefile4.write("{A} \t&\t {G1} \t&\t {G2} \\\\ \n".format(A=q+1, G1=np.round(QUPphi0_jq[1,:,q],3), G2=np.round(sigmaQUPphi0_jq[1,:,q],3)))
+        
+        savefile5.write("{A} \t&\t {H1} \t&\t {H2} \\\\ \n".format(A=q+1, H1=np.round(QUPphi0_jq[2,:,q],3), H2=np.round(sigmaQUPphi0_jq[2,:,q],3)))
+    
+        savefile6.write("{A} \t&\t {I1} \t&\t {I2} \\\\ \n".format(A=q+1, I1=np.round(QUPphi0_jq[3,:,q],3), I2=np.round(sigmaQUPphi0_jq[3,:,q],3)))
+    os.chdir(stddatadir)        
+    '''
 
 
 '''

@@ -157,20 +157,23 @@ def compute_fluxlsts(std_dirs, bias, masterflat_norm, loc_lsts, r_range):
         filter_lst = []
         for j, tpl_name in enumerate(tpl_dirlst):
             print("\n\n\t {}".format(tpl_name))
-            tpl_dir = std_dir + '/' + tpl_name
-            
-            # Skip non-usable templates (non-usable templates should be put in a folder "skipped" or an equivalent directory which doesn't start with the string "tpl").
-            if std_dir.split("/")[-2] == "Vela1_95" and tpl_name in ["tpl1", "tpl2", "tpl3"]:
-                continue 
+            tpl_dir = std_dir + '/' + tpl_name         
             
             
             # Create a list with filenames of files stored within tpldir
             expdir_lst, expfile_lst = mk_lsts(tpl_dir)
             expfile_lst = np.sort(expfile_lst)
-            
+
             # Initial setting for the least amount of detected stars within the template
             N_stars = 1e18
             
+            
+            # Skip non-usable templates (non-usable templates should be put in a folder "skipped" or an equivalent directory which doesn't start with the string "tpl") or incomplete templates.
+            if ((std_dir.split("/")[-2] == "Vela1_95" and tpl_name in ["tpl1", "tpl2", "tpl3"])
+                or len(expfile_lst != 4)):
+                print("\t skipped"))
+                continue 
+                        
             
             # Initiate first sublists for distinguishing different exposures
             O_1lst, sigmaO_1lst = [], []
@@ -179,82 +182,88 @@ def compute_fluxlsts(std_dirs, bias, masterflat_norm, loc_lsts, r_range):
             for k, f in enumerate(expfile_lst):
                 print("\n\t\t {}".format(f))
 
-                if (f.endswith("fits")) and (len(expfile_lst) == 4):
-                    header, data = extract_data(tpl_dir + '/' + f)
-                    # Subtract bias
-                    data = data - bias
-                    data = data / masterflat_norm
-                    # Save corrected image
-                    savedir = tpl_dir + "/corrected2" 
-                    if not os.path.exists(savedir):
-                        os.makedirs(savedir)
-                    elif os.path.exists(savedir) and k==0:
-                        shutil.rmtree(savedir)
-                        os.makedirs(savedir)
-                    hdu = fits.PrimaryHDU(data)
-                    hdulist = fits.HDUList([hdu])
-                    hdulist.writeto(savedir + '/' + f.split(".fits")[0] + "_COR.fits")
-                    
-                    
-                    
-                    # Specify observation parameters
-                    expno = header["HIERARCH ESO TPL EXPNO"]
-                    filt_name = header["HIERARCH ESO INS FILT1 NAME"]
-                    filt_id = header["HIERARCH ESO INS FILT1 ID"]
-                    ret_angle = header["HIERARCH ESO INS RETA2 POSANG"] * np.pi / 180. #rad
-                    woll_angle = header["HIERARCH ESO INS WOLL POSANG"] * np.pi / 180. #rad
-                    print("\t\t\t\tFILTER_ID: {A}; \t FILTER_NAME: {B}".format(A=filt_id, B = filt_name))
-                    print("\t\t\t\tWollangle: {A}; \t Retangle: {B}".format(A=woll_angle, B = np.round(ret_angle, 2)))                
-                      
 
-       
-                    # Initiate second sublist of F for distinguishing between different stars within the current exposure
-                    O_2lst, sigmaO_2lst = [], []
-                    E_2lst, sigmaE_2lst = [], []
-                    F_2lst, sigmaF_2lst = [], []
-                    for q, coord in enumerate(loc_lsts[i]):
+                # Skip non-fits files
+                if not f.endswith(".fits"):
+                    print("\t\t skipped")
+                    continue 
+                    
+                
+                header, data = extract_data(tpl_dir + '/' + f)
+                # Subtract bias
+                data = data - bias
+                data = data / masterflat_norm
+                # Save corrected image
+                savedir = tpl_dir + "/corrected2" 
+                if not os.path.exists(savedir):
+                    os.makedirs(savedir)
+                elif os.path.exists(savedir) and k==0:
+                    shutil.rmtree(savedir)
+                    os.makedirs(savedir)
+                hdu = fits.PrimaryHDU(data)
+                hdulist = fits.HDUList([hdu])
+                hdulist.writeto(savedir + '/' + f.split(".fits")[0] + "_COR.fits")
+                
+                
+                
+                # Specify observation parameters
+                expno = header["HIERARCH ESO TPL EXPNO"]
+                filt_name = header["HIERARCH ESO INS FILT1 NAME"]
+                filt_id = header["HIERARCH ESO INS FILT1 ID"]
+                ret_angle = header["HIERARCH ESO INS RETA2 POSANG"] * np.pi / 180. #rad
+                woll_angle = header["HIERARCH ESO INS WOLL POSANG"] * np.pi / 180. #rad
+                print("\t\t\t\tFILTER_ID: {A}; \t FILTER_NAME: {B}".format(A=filt_id, B = filt_name))
+                print("\t\t\t\tWollangle: {A}; \t Retangle: {B}".format(A=woll_angle, B = np.round(ret_angle, 2)))                
+                  
 
-                        # Finds the central pixel of the selected stars within the specific exposure                    
-                        coord1, coord2 = coord[0:2], [coord[0],coord[2]]
-                        if q not in np.arange(len(loc_lsts[i])-4, len(loc_lsts[i]), 1):
-                            center1 = find_center(coord1, data, 15)
-                            center2 = find_center(coord2, data, 15)
-                            centers = [center1, center2]
-                        if q in np.arange(len(loc_lsts[i])-4, len(loc_lsts[i]), 1):
-                            centers = [coord1, coord2] # Sky aperture
+   
+                # Initiate second sublist of F for distinguishing between different stars within the current exposure
+                O_2lst, sigmaO_2lst = [], []
+                E_2lst, sigmaE_2lst = [], []
+                F_2lst, sigmaF_2lst = [], []
+                for q, coord in enumerate(loc_lsts[i]):
+
+                    # Finds the central pixel of the selected stars within the specific exposure                    
+                    coord1, coord2 = coord[0:2], [coord[0],coord[2]]
+                    if q not in np.arange(len(loc_lsts[i])-4, len(loc_lsts[i]), 1):
+                        center1 = find_center(coord1, data, 15)
+                        center2 = find_center(coord2, data, 15)
+                        centers = [center1, center2]
+                    if q in np.arange(len(loc_lsts[i])-4, len(loc_lsts[i]), 1):
+                        centers = [coord1, coord2] # Sky aperture
+                    
+
+                    
+                    # Initiate third sublist of F for distinguishing between different aperture radii
+                    O_3lst, sigmaO_3lst = [], []
+                    E_3lst, sigmaE_3lst = [], []
+                    F_3lst, sigmaF_3lst = [], [] 
+                    for l, R in enumerate(r_range):  
+
+                        # Lists for temporary storage of aperture sum values and corresponding shotnoise levels
+                        apsum_lst, shotnoise_lst = [], []
+                        for center in centers:
                         
-
+                            # Compute cumulative counts within aperture
+                            apsum = apersum(data, center[0], center[1], R)
+                            apsum_lst.append(apsum)
+                            # Compute photon shot noise within aperture 
+                            shotnoise = np.sqrt(apsum)
+                            shotnoise_lst.append(shotnoise)
                         
-                        # Initiate third sublist of F for distinguishing between different aperture radii
-                        O_3lst, sigmaO_3lst = [], []
-                        E_3lst, sigmaE_3lst = [], []
-                        F_3lst, sigmaF_3lst = [], [] 
-                        for l, R in enumerate(r_range):  
-
-                            # Lists for temporary storage of aperture sum values and corresponding shotnoise levels
-                            apsum_lst, shotnoise_lst = [], []
-                            for center in centers:
-                            
-                                # Compute cumulative counts within aperture
-                                apsum = apersum(data, center[0], center[1], R)
-                                apsum_lst.append(apsum)
-                                # Compute photon shot noise within aperture 
-                                shotnoise = np.sqrt(apsum)
-                                shotnoise_lst.append(shotnoise)
-                            
-                            # Compute normalised flux differences for current aperture size
-                            F, sigmaF = fluxdiff_norm(apsum_lst[1], apsum_lst[0], shotnoise_lst[1], shotnoise_lst[0]) 
-                            
-                            
-                            
-                            # Append results to third sublist
-                            O_3lst.append(apsum_lst[1]), sigmaO_3lst.append(shotnoise_lst[1])
-                            E_3lst.append(apsum_lst[0]), sigmaE_3lst.append(shotnoise_lst[0])
-                            F_3lst.append(F), sigmaF_3lst.append(sigmaF)
-                        # Append the third sublist to the second sublist
-                        O_2lst.append(O_3lst), sigmaO_2lst.append(sigmaO_3lst)
-                        E_2lst.append(E_3lst), sigmaE_2lst.append(sigmaE_3lst)
-                        F_2lst.append(F_3lst), sigmaF_2lst.append(sigmaF_3lst)
+                        # Compute normalised flux differences for current aperture size
+                        F, sigmaF = fluxdiff_norm(apsum_lst[1], apsum_lst[0], shotnoise_lst[1], shotnoise_lst[0]) 
+                        
+                        
+                        
+                        # Append results to third sublist
+                        O_3lst.append(apsum_lst[1]), sigmaO_3lst.append(shotnoise_lst[1])
+                        E_3lst.append(apsum_lst[0]), sigmaE_3lst.append(shotnoise_lst[0])
+                        F_3lst.append(F), sigmaF_3lst.append(sigmaF)
+                    # Append the third sublist to the second sublist
+                    O_2lst.append(O_3lst), sigmaO_2lst.append(sigmaO_3lst)
+                    E_2lst.append(E_3lst), sigmaE_2lst.append(sigmaE_3lst)
+                    F_2lst.append(F_3lst), sigmaF_2lst.append(sigmaF_3lst)
                 # Append second sublist to first sublist
                 O_1lst.append(O_2lst), sigmaO_1lst.append(sigmaO_2lst)
                 E_1lst.append(E_2lst), sigmaE_1lst.append(sigmaE_2lst)
@@ -271,7 +280,7 @@ def compute_fluxlsts(std_dirs, bias, masterflat_norm, loc_lsts, r_range):
         F_0lst, sigmaF_0lst = np.array(F_0lst), np.array(sigmaF_0lst) 
         
         # Save the flux arrays
-        savedir = std_dir.rsplit("/",2)[0] + "/loadfiles/" + std_dir.rsplit("/",2)[1]
+        savedir = std_dir.rsplit("/sorted")[0] + "/sorted/loadfiles/" + std_dir.rsplit("/",2)[1]
         if not os.path.exists(savedir):
             os.makedirs(savedir)
         np.save(savedir + "/O_0lst.npy", O_0lst), np.save(savedir + "/sigmaO_0lst.npy", sigmaO_0lst)
@@ -555,10 +564,6 @@ def text_plotter(x_data, y_data, text_positions, axis,txt_width,txt_height):
 # Specify necessary directories
 datadir = "/home/bjung/Documents/Leiden_University/brp/data_red/calib_data"
 stddatadir = datadir + "/sorted/STD,IPOL"
-veladir = stddatadir + "/Vela1_95/CHIP1"
-plotim1 = stddatadir + "/Vela1_95/CHIP1/tpl8/FORS2.2011-05-04T00:24:56.664.fits"
-plotim2 = stddatadir + "/WD1615_154/CHIP1/tpl3/FORS2.2011-05-04T05:37:44.543.fits"
-plotims = [plotim1, plotim2]
 plotdir = "/home/bjung/Documents/Leiden_University/brp/data_red/plots"
 # Create list of directories and files within veladir
 std_dirs = [stddatadir + "/Vela1_95/CHIP1", stddatadir + "/WD1615_154/CHIP1"]
@@ -609,7 +614,7 @@ if compute_anew == True:
 for i, std_dir in enumerate(std_dirs):
     print(std_dir.split("/")[-2])
     
-    loaddir = stddatadir + "/loadfiles/" + std_dir.split("/")[-2]
+    loaddir = std_dir.rsplit("/",2)[0] + "/loadfiles/" + std_dir.rsplit("/",2)[1]
     regions = np.array(star_lsts[i])
     ESO_BV_PlPhi, ESO_BV_sigmaPlPhi = ESObvPLPHI[i], sigmaESObvPLPHI[i]
     
@@ -905,7 +910,7 @@ for i, std_dir in enumerate(std_dirs):
         fig5 = plt.figure(5)
         ax5 = fig5.add_subplot(111)
         # Load image
-        vecplotdir = std_dir + '/' + tpl_name + '/corrected/'
+        vecplotdir = std_dir + '/' + tpl_name + '/corrected2/'
         datadirs, datafiles = mk_lsts(vecplotdir)
         header, datacor = extract_data(vecplotdir + datafiles[0])
         # Compute vectors
