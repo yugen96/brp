@@ -99,6 +99,38 @@ def find_center(coord, data_array, window_size):
                 
             
     
+# Function which calculates the aperture count rate for a star centered at pixel coordinates [px, py] for an aperture radius r (sky annulus subtraction not included).
+def apersum_old(image, px, py, r):
+    
+    
+    # Determine the aperture limits
+    ny, nx = image.shape
+    apx_min = max(1, px - r)
+    apx_max = min(nx, px + r)
+    apy_min = max(1, py - r)
+    apy_max = min(ny, py + r)
+
+    
+    # Compute the total count rate within the aperture
+    apsum = 0.0
+    for i in range(apx_min, apx_max+1):
+        for j in range(apy_min, apy_max+1):
+            
+            # Calculate squared distance to central pixel
+            dx = i - px
+            dy = j - py
+            d2 = dx**2 + dy**2
+            
+            # Store the current pixel's count value
+            pixval = image[j-1,i-1]
+            
+            if d2 <= r**2:
+                apsum += pixval
+                
+    return apsum
+    
+    
+
 # Function which calculates the aperture count rate for a star centered at pixel coordinates [px, py] for an aperture radius r. The parameters minAn_r and maxAn_r define the inner and outer radii of the sky annulus.
 def apersum(image, px, py, r, minAn_r, maxAn_r):
     
@@ -142,7 +174,7 @@ def apersum(image, px, py, r, minAn_r, maxAn_r):
     
     
     # Iterate through the annulus several more times, in order to rule out the possibility of including any outliers
-    itnos = 4
+    itnos = 8
     for n in range(itnos):
         
         # Check whether annulus pixel values are within 2 sigma reach of the average annulus rate
@@ -171,6 +203,7 @@ def apersum(image, px, py, r, minAn_r, maxAn_r):
         av_an, av_an2 = ansum/float(ancount), ansum2/float(ancount)
         sigma_an = np.sqrt(av_an2 - av_an**2)
         
+        print("\n\n\t\t\t\titeration:\t{} \n\t\t\t\t sigma_an:\t{}".format(n, sigma_an))
         
     # Compute and return calibrated aperture flux
     apscal = apsum - apcount*av_an          
@@ -204,6 +237,10 @@ def compute_fluxlsts(data_dirs, bias, masterflat_norm, loc_lsts, r_range):
         F_0lst, sigmaF_0lst = [], []
         # List for storing the filters of each exposure as well as the q-index and xcoordinate of the STD star within each template (axis1) and each exposure (axis2)
         filter_lst = []
+        pos0_lst = []
+        # Array for storing the images of all templates and exposures using the correct offsets w.r.t. the first exposure of template 1
+        frames_jk = np.zeros(len(tpl_dirlst), 4, 1084, 2098)
+        
         for j, tpl_name in enumerate(tpl_dirlst):
             print("\n\n\t {}".format(tpl_name))     
             tpl_dir = data_dir + '/' + tpl_name
@@ -227,6 +264,8 @@ def compute_fluxlsts(data_dirs, bias, masterflat_norm, loc_lsts, r_range):
             O_1lst, sigmaO_1lst = [], []
             E_1lst, sigmaE_1lst = [], []
             F_1lst, sigmaF_1lst = [], []
+            # Initiate sublist which tracks the positions of each star for each expsoure within template 'j'
+            pos1_lst = []
             for k, f in enumerate(expfile_lst):
                 print("\n\t\t {}".format(f))
                 
@@ -239,8 +278,8 @@ def compute_fluxlsts(data_dirs, bias, masterflat_norm, loc_lsts, r_range):
                 
                 header, data = extract_data(tpl_dir + '/' + f)
                 # Subtract bias
-                data = data - bias
-                data = data / masterflat_norm
+                datacor1 = data - bias
+                datacor2 = datacor1 / masterflat_norm
                 # Save corrected image
                 savedir = tpl_dir + "/corrected2" 
                 if not os.path.exists(savedir):
@@ -248,12 +287,12 @@ def compute_fluxlsts(data_dirs, bias, masterflat_norm, loc_lsts, r_range):
                 elif os.path.exists(savedir) and k==0:
                     shutil.rmtree(savedir)
                     os.makedirs(savedir)
-                hdu = fits.PrimaryHDU(data)
+                hdu = fits.PrimaryHDU(datacor2)
                 hdulist = fits.HDUList([hdu])
                 hdulist.writeto(savedir + '/' + f.split(".fits")[0] + "_COR.fits")
-
-
-       
+                
+                
+                
                 # Specify observation parameters
                 expno = header["HIERARCH ESO TPL EXPNO"]
                 filt_name = header["HIERARCH ESO INS FILT1 NAME"]
@@ -269,9 +308,11 @@ def compute_fluxlsts(data_dirs, bias, masterflat_norm, loc_lsts, r_range):
                 O_2lst, sigmaO_2lst = [], []
                 E_2lst, sigmaE_2lst = [], []
                 F_2lst, sigmaF_2lst = [], []
+                # List which tracks the center position of the PSF's of all stars within the k-th exposure of template 'j'
+                pos2_lst = []
                 for q, coord in enumerate(loc_lsts[i]):
                     # Finds the central pixel of the selected stars within the specific exposure                    
-                    coord1, coord2 = coord[0:2], [coord[0],coord[2]]
+                    coord1, coord2, PSFr = coord[0:2], [coord[0],coord[2]], coord[3]
                     center1 = find_center(coord1, data, 15) #TODO TODO NOTE: NO SKY APERTURES!
                     center2 = find_center(coord2, data, 15)
                     centers = [center1, center2]
@@ -287,11 +328,15 @@ def compute_fluxlsts(data_dirs, bias, masterflat_norm, loc_lsts, r_range):
                         apsum_lst, shotnoise_lst = [], []
                         for center in centers:
                             
-                            # Define sky annulus inner and outer radii
-                            minRan, maxRan = int(1.15*coord[3]), int(1.5*coord[3])
+                            # Define sky annulus inner and outer radii\
+                            if R < PSFr:
+                                minRan, maxRan = int(PSFr), int(1.5*PSFr)
+                            else:
+                                minRan, maxRan = int(R), int(1.5*R)
                             # Compute cumulative counts within aperture
                             apsum = apersum(data, center[0], center[1], 
-                                            R, minRan, maxRan)
+                                            R, minRan, maxRan) #TODO TODO TODO UNCOMMENT
+                            #apsum = apersum(data, center[0], center[1], R)
                             apsum_lst.append(apsum)
                             # Compute photon shot noise within aperture 
                             shotnoise = np.sqrt(apsum)
@@ -311,23 +356,25 @@ def compute_fluxlsts(data_dirs, bias, masterflat_norm, loc_lsts, r_range):
                     O_2lst.append(O_3lst), sigmaO_2lst.append(sigmaO_3lst)
                     E_2lst.append(E_3lst), sigmaE_2lst.append(sigmaE_3lst)
                     F_2lst.append(F_3lst), sigmaF_2lst.append(sigmaF_3lst)
+                    # Append centers to pos2_lst
+                    pos2_lst.append(centers) 
                 # Append second sublist to first sublist
                 O_1lst.append(O_2lst), sigmaO_1lst.append(sigmaO_2lst)
                 E_1lst.append(E_2lst), sigmaE_1lst.append(sigmaE_2lst)
                 F_1lst.append(F_2lst), sigmaF_1lst.append(sigmaF_2lst)
-            if len(O_1lst) != 4:
-                print("JU LEE, DO THE THING!!!!!")
+                # Append pos2_lst to pos1_lst
+                pos1_lst.append(pos2_lst)
             # Append first sublist to main list 
             O_0lst.append(O_1lst), sigmaO_0lst.append(sigmaO_1lst)
             E_0lst.append(E_1lst), sigmaE_0lst.append(sigmaE_1lst)
             F_0lst.append(F_1lst), sigmaF_0lst.append(sigmaF_1lst)      
-            # Append filter name to filter_lst
-            filter_lst.append(filt_name)
+            # Append filter name to filter_lst and append pos1_lst to pos0_lst
+            filter_lst.append(filt_name), pos0_lst.append(pos1_lst)
         # Transform into arrays for future computations
         O_0lst, sigmaO_0lst = np.array(O_0lst), np.array(sigmaO_0lst)
         E_0lst, sigmaE_0lst = np.array(E_0lst), np.array(sigmaE_0lst)
         F_0lst, sigmaF_0lst = np.array(F_0lst), np.array(sigmaF_0lst) 
-        
+        filter_lst, pos0_lst = np.array(filter_lst), np.array(pos0_lst)
         
         # Save the flux arrays
         savedir = data_dir.rsplit("/sorted")[0] + "/sorted/loadfiles/" + data_dir.rsplit("/",2)[1]
@@ -336,8 +383,8 @@ def compute_fluxlsts(data_dirs, bias, masterflat_norm, loc_lsts, r_range):
         np.save(savedir + "/O_0lst.npy", O_0lst), np.save(savedir + "/sigmaO_0lst.npy", sigmaO_0lst)
         np.save(savedir + "/E_0lst.npy", E_0lst), np.save(savedir + "/sigmaE_0lst.npy", sigmaE_0lst)
         np.save(savedir + "/F_0lst.npy", F_0lst), np.save(savedir + "/sigmaF_0lst.npy", sigmaF_0lst)
-        # Save filt_lst
-        np.save(savedir + "/filter_lst.npy", filter_lst)
+        # Save filt_lst and pos0_lst
+        np.save(savedir + "/filter_lst.npy", filter_lst), np.save(savedir + "/pos0_lst.npy", pos0_lst)
 # END COMPUTE_FLUXLSTS
 
 
@@ -362,12 +409,14 @@ def load_lsts(loaddir):
     O_jkqr, sigmaO_jkqr = np.load("O_0lst.npy"), np.load("sigmaO_0lst.npy")
     E_jkqr, sigmaE_jkqr = np.load("E_0lst.npy"), np.load("sigmaE_0lst.npy")
     F_jkqr, sigmaF_jkqr = np.load("F_0lst.npy"), np.load("sigmaF_0lst.npy")
-    print("List structures loaded...")
-    # Load filter_lst
-    filter_lst = np.load("filter_lst.npy")
-    os.chdir(currdir)
     
-    return np.array([O_jkqr, E_jkqr, F_jkqr]), np.array([sigmaO_jkqr, sigmaE_jkqr, sigmaF_jkqr]), filter_lst
+    # Load filter_lst and pos0_lst
+    filter_lst = np.load("filter_lst.npy")
+    pos0_lst = np.load("pos0_lst.npy")
+    os.chdir(currdir)
+    print("List structures loaded...")
+    
+    return np.array([O_jkqr, E_jkqr, F_jkqr]), np.array([sigmaO_jkqr, sigmaE_jkqr, sigmaF_jkqr]), filter_lst, pos0_lst
 
 
 
@@ -376,14 +425,16 @@ def compute_pol(F_lst, sigmaF_lst):
     # Compute Stokes variables
     Q_jqr = 0.5 * F_lst[:,0,:,:] - 0.5 * F_lst[:,2,:,:]
     U_jqr = 0.5 * F_lst[:,1,:,:] - 0.5 * F_lst[:,3,:,:]
+    
     # Compute standard deviations
     sigmaQ_jqr = 0.5 * np.sqrt(sigmaF_lst[:,0,:,:]**2 + sigmaF_lst[:,2,:,:]**2)
     sigmaU_jqr = 0.5 * np.sqrt(sigmaF_lst[:,1,:,:]**2 + sigmaF_lst[:,3,:,:]**2)
-
+    
     # Compute degree of linear polarization and polarization angle
     fracUQ_jqr = np.divide(U_jqr, Q_jqr) # --
     P_jqr = np.sqrt(Q_jqr**2 + U_jqr**2) # --
     Phi_jqr = 0.5 * np.arctan(fracUQ_jqr) * (180. / np.pi) # deg
+    
     # Compute standard deviation on degree of linear polarization
     tempP = np.sqrt( (Q_jqr * sigmaQ_jqr)**2 + (U_jqr * sigmaU_jqr)**2 )
     sigmaP_jqr = np.divide(tempP, P_jqr)
@@ -612,15 +663,33 @@ def text_plotter(x_data, y_data, text_positions, axis,txt_width,txt_height):
 
 
 
-# Function which computes O - E for all slits and appends the results to recreate a single image of the sky
-def append_slits(slitdata, pixoffs=np.zeros(5)):
+# Function which embeds a data array in a larger (nrow,ncol)-frame, in order to correctly overlap images. Frameshape should be specified with its first element indicating the number of rows and its second element indicating the number of columns! Conversely, offset should be specified with its first element (X) indicating the column-wise offset and its second element (Y) indicating the row-wise offset! 'Cornerpix' define the pixel indices corresponding to the frame position where the upper left corner of the data array should be placed.
+def embed(data, frameshape, offset=np.zeros(2), cornerpix=[0,0]):
+    
+    # Determine frame limits and create frame accordingly
+    nrow, ncol = frameshape[0], frameshape[1]
+    frame = np.zeros([nrow,ncol])
+    
+    # Determine data shape
+    nrow_dat, ncol_dat = data.shape[0], data.shape[1]
+    
+    # Embed the data array in the frame, using the specified offset. NOTE: x=columns and y=rows!
+    frame[cornerpix[0]+offset[1]:cornerpix[0]+offset[1]+nrow_dat, 
+          cornerpix[1]+offset[0]:cornerpix[1]+offset[0]+ncol_dat] = data
+    
+    return frame
+
+
+
+# Function which cuts each image into approximate slits using the first derivative along Y
+def cut_to_slits(slitdata):
     chipdata = slitdata[10:934:,183:1868]
     rowsno = chipdata.shape[0]
-
-
+    
+    
     # Read out chipdata row for row and cut out slits
-    derivs = []
-    slits = []
+    derivs, slits, slitwidths = [], [], []
+    agap, cutend, gapwidths = True, 0, []
     itnos = np.arange(1, rowsno-2, 1)
     for i in itnos:
         
@@ -630,19 +699,24 @@ def append_slits(slitdata, pixoffs=np.zeros(5)):
         deriv = next1rowmed - rowmed
         nextderiv = next2rowmed - next1rowmed
         derivs.append(deriv)
-                
+        
         # Cut out slits and extraordinary and ordinary beams from the data array
         if np.abs(deriv) > 20. and np.abs(nextderiv) < 20.:          
             cutstart = i
-                
+        
         if np.abs(deriv) < 20. and np.abs(nextderiv) > 20.:
+            prevcutend = cutend
             cutend = i
+                
             
             # Skips the first peak in the derivatives, so that slit can be cut out correctly
             try:
                 slit = chipdata[ cutstart:cutend, : ]
                 if slit.shape[0]>10:
                     slits.append(slit)
+                    slitwidths.append(slit.shape[0])
+                    gapwidths.append( cutstart - prevcutend ) # [pixels]
+                        
                     
                     # Diagnostic plot
                     '''
@@ -653,11 +727,11 @@ def append_slits(slitdata, pixoffs=np.zeros(5)):
                     plt.show()
                     plt.close()
                     '''
-    
+            
             except NameError:
                 print("first max")
     
-    
+    return slits, slitwidths, gapwidths
     # Diagnostic plot
     '''
     plt.figure(1)
@@ -666,35 +740,111 @@ def append_slits(slitdata, pixoffs=np.zeros(5)):
     plt.close()
     '''
     
-    
-    
 
-    print("\n\n")
-    for n in np.arange(0, len(slits), 2):
-        # Select pixel offset
-        pixoff = pixoffs[n/2]
+    
+# Function which computes O - E for all slits created via cut_to_slits and inserts the results into the array 'frame' in order to recreate a single image of the sky
+def append_slits(slits, slitwidths, gapwidths, starpos_qca):
+
+    # Compute number of slits
+    nrofslits = len(slits)
+
+    for n in np.arange(0, nrofslits, 2):
         
-        # Check that each slit contains the same number of pixel rows
-        if slits[n+1].shape[0] < slits[n].shape[0]:
-            newxlen = slits[n+1].shape[0]
-            slits[n] = slits[n][0:newxlen, :]
+        '''
+        # Find the star positions on each slit
+        yO_qa = ( starpos_qca[:,0,1] - np.sum(slitwidths[n+1::]) 
+                                     - np.sum(gapwidths[n+1::]) )
+        yE_qa = ( starpos_qca[:,1,1] - np.sum(slitwidths[n+2::]) 
+                                     - np.sum(gapwidths[n+2::]) )
+        '''
+                                     
+        centers_qca = np.zeros([len(starpos_qca),2,2])
+        for q, approxX in enumerate(starpos_qca[0,:,0]):
             
-        elif slits[n+1].shape[0] > slits[n].shape[0]:
-            newxlen = slits[n].shape[0]
-            slits[n+1] = slits[n+1][0:newxlen, :]
+            approxY_O, approxY_E = np.argmax(slits[n][:,approxX]), np.argmax(slits[n+1][:,approxX])
+            centers_qca[q,0] = find_center([approxX,approxY_O], slits[n], 15)
+            centers_qca[q,1] = find_center([approxX,approxY_E], slits[n+1], 15)
             
-        print("newxlen:\t\t{}".format(newxlen))
+            '''
+            centers_qca[q,0] = find_center([starpos_qca[q,0,0],approxY_c[0]], slits[n], 15)
+            centers_qca[q,1] = find_center([starpos_qca[q,1,0],approxY_c[1]], slits[n+1], 15)
+            '''
+        # Determine stellar position offsets compared to slit O
+        offsets_qa = np.diff(centers_qca, axis=1)
+        offsets = np.mean(offsets_qa, axis=0).astype(int)[0]
         
         
+        
+        # Embed 
+        framesize = 1.5*np.array(slits[0].shape)
+        cornerO = ((framesize - slits[n].shape) / 2).astype(int)
+        cornerE = ((framesize - slits[n].shape) / 2).astype(int)
+        frameO = embed(slits[n], framesize, cornerpix=cornerO)
+        frameE = embed(slits[n+1], framesize, offset=offsets+[0,3], cornerpix=cornerE) 
+        
+        
+
         # Compute the normalized difference between the ordinary and extroardinary slit (or the other way arround?)
-        slit_diff = slits[n] - slits[n+1]
-        slit_sum = slits[n] + slits[n+1]
+        slit_diff = frameO - frameE
+        slit_sum = frameO + frameE
         cal_slit =  slit_diff / slit_sum
         if n == 0:
             cal_slits = cal_slit
         else:
             cal_slits = np.concatenate((cal_slits, cal_slit), axis=0)
-
+        
+             
+        '''
+        # Check that each slit contains the same number of pixel rows
+        if slits[n+1].shape[0] < slits[n].shape[0]:
+            newxlen = slits[n+1].shape[0]
+            slits[n] = slits[n][0:newxlen, :]
+        
+        elif slits[n+1].shape[0] > slits[n].shape[0]:
+            newxlen = slits[n].shape[0]
+            slits[n+1] = slits[n+1][0:newxlen, :]
+        
+        print("newxlen:\t\t{}".format(newxlen))
+        
+        
+        
+        # Select a region of E which is to be subtracted from O taking into account the offset
+        sel_slitO, sel_slitE = slits[n], slits[n+1]
+        print(sel_slitO.shape, sel_slitE.shape)
+        for a, offset in enumerate(offsets[0]):
+            print(offsets)
+            if a==0 and offset >= 0:
+                sel_slitE = sel_slitE[offset::, :]
+                print(sel_slitE.shape)
+            elif a==0 and offset < 0:
+                sel_slitE = sel_slitE[0:(sel_slitE.shape[1]+offset+1) , :]
+                print(sel_slitE.shape)
+            elif a==1 and offset >= 0:
+                sel_slitE = sel_slitE[:, offset::]
+                print(sel_slitE.shape)
+            elif a==1 and offset < 0:
+                sel_slitE = sel_slitE[:, 0:(sel_slitE.shape[1]+offset+1)]
+                print(sel_slitE.shape)
+        
+        print("POEPIEEEEK\t\t", sel_slitE.shape, sel_slitO.shape)
+        # Compute the normalized difference between the ordinary and extroardinary slit (or the other way arround?)
+        sel_shape = sel_slitE.shape
+        sel_slitO = sel_slitO[0:sel_shape[0], 0:sel_shape[1]]
+        slit_diff = sel_slitO - sel_slitE
+        slit_sum = sel_slitO + sel_slitE
+        print(slit_diff.shape, slit_sum.shape)
+        cal_slit =  slit_diff / slit_sum
+        if n == 0:
+            cal_slit0 = cal_slit
+            cal_slits = cal_slit0
+        else:
+            cal_slit = cal_slit[0:cal_slit0.shape[0]+1, :] # TODO TODO PERHAPS CHANGE TO EMBED AFTER ALL
+            cal_slit = cal_slit[:, 0:cal_slit0.shape[1]+1]
+            print("POEPIEK2\t\t:", cal_slit0.shape, cal_slit.shape)
+            cal_slits = np.concatenate((cal_slits, cal_slit), axis=0)
+        '''
+        
+        
     return cal_slits
 
 
@@ -723,25 +873,26 @@ header, Mflat_norm = extract_data(datadir + "/masterflats/masterflat_norm_FLAT,L
 # Aproximate coordinates of selection of stars within CHIP1 of 'Vela1_95' and 'WD1615_154'. Axis 0 specifiec the different sci_dirs; axis 1 specifies the different stars within the sci_dirs; axis 2 specifies the x, y1, y2 coordinate of the specific star (with y1 specifying the y coordinate on the upper slit and y2 indicating the y coordinate on the lower slit) and the aproximate stellar radius. NOTE: THE LAST LIST WITHIN AXIS1 IS A SKY APERTURE!!!
 star_lsts = [[[335, 904, 807, 5], [514, 869, 773, 7], [1169, 907, 811, 5], [1383, 878, 782, 7], 
               [341, 694, 599, 10], [370, 702, 607, 11], [362, 724, 630, 5], [898, 709, 609, 8], 
-              [1630, 721, 626, 5], [1836, 707, 611, 6], [227, 523, 429, 6], [343, 492, 399, 5], 
-              [354, 494, 400, 12], [373, 520, 413, 8], [537, 491, 392, 7], [571, 541, 446, 8], 
-              [1096, 510, 416, 5], [1179, 530, 436, 8], [487, 320, 226, 7], [637, 331, 238, 6], 
-              [1214, 345, 252, 6], [1248, 326, 233, 6], [1663, 308, 217, 9], [326, 132, 40, 5], 
-              [613, 186, 94, 10], [634, 184, 91, 9], [642, 134, 41, 7], [838, 175, 82, 8], 
-              [990, 140, 48, 11], [1033, 157, 65, 9], [1172, 147, 55, 7], [1315, 164, 71, 8], 
-              [1549, 164, 72, 13]]] 
+              [1836, 707, 611, 6], [227, 523, 429, 6], [343, 492, 399, 5], [354, 494, 400, 12], 
+              [373, 520, 413, 8], [537, 491, 392, 7], [571, 541, 446, 8], [1096, 510, 416, 5], 
+              [1179, 530, 436, 8], [487, 320, 226, 7], [637, 331, 238, 6], [1214, 345, 252, 6], 
+              [1248, 326, 233, 6], [1663, 308, 217, 9], [326, 132, 40, 5], [613, 186, 94, 10], 
+              [634, 184, 91, 9], [642, 134, 41, 7], [838, 175, 82, 8], [990, 140, 48, 11], 
+              [1033, 157, 65, 9], [1172, 147, 55, 7], [1315, 164, 71, 8], [1549, 164, 72, 13]]] 
 star_lsts = np.array(star_lsts) # 35 stars in total (42-7)
+# List specifying the (axis1) indices of the first stars on each slit
+slit_divide = np.array([0, 4, 9, 17, 22])
 
 
 
 # Range of aperture radii
-r_range = np.arange(1, np.max(star_lsts[:,:,3])+1) #[pixels]
+r_range = np.arange(1, 16) #[pixels]
 
 # Pixel scale
 pixscale = 0.126 #[arcsec/pixel]
 
 # Boolean variable for switchin on polarization computations of selected stars
-compute_anew = True
+compute_anew = False
 
 # ESO given polarizations
 VelaBV_PlPhi = [[0., 0.],[0., 0.]] # [-], [deg]
@@ -755,10 +906,6 @@ sigmaESObvPLPHI = np.array([VelaBV_sigmaPlPhi, WD1615BV_sigmaPlPhi])
 # Compute fluxes and polarizations for selected stars in testdata and carry out slit appenditure
 if compute_anew == True:
     compute_fluxlsts(sci_dirs, Mbias, Mflat_norm, star_lsts, r_range)
-
-# Load flux lists and filter list for plots
-loaddir = sci_dirs[0].rsplit("/sorted")[0] + "/sorted/loadfiles/" + sci_dirs[0].rsplit("/",2)[1]
-OEF_jkqr, sigmaOEF_jkqr, filter_lst = load_lsts(loaddir)
 
 
 
@@ -784,18 +931,17 @@ for i, sci_dir in enumerate(sci_dirs):
     
     
     # Load flux lists and filter list for plots
-    OEF_jkqr, sigmaOEF_jkqr, filter_lst = load_lsts(loaddir)
-    OEF_jkqr, sigmaOEF_jkqr = np.nan_to_num(OEF_jkqr), np.nan_to_num(sigmaOEF_jkqr)
+    OEF_jkqr, sigmaOEF_jkqr, filter_lst, pos_jkqca = load_lsts(loaddir)
+    #OEF_jkqr, sigmaOEF_jkqr = np.nan_to_num(OEF_jkqr), np.nan_to_num(sigmaOEF_jkqr)
     '''
     # Set NAN values to 0
-    OEF_jkqr = np.where(OEF_jkqr >= 0., OEF_jkqr, 0.)
     sigmaOEF_jkqr = np.where(sigmaOEF_jkqr >= 0., sigmaOEF_jkqr, 0.)
     '''
     # Select correct aperture radii for each region
     OEF_jkq = np.array([ jkqr[:,:,reg_ind,rad_ind] for jkqr in OEF_jkqr])
     sigmaOEF_jkq = np.array([ sigma_jkqr[:,:,reg_ind,rad_ind] for sigma_jkqr in sigmaOEF_jkqr])
     
-        
+    
     # Compute Stokes Q and U as well as the linear polarization degree and angle and all corresponding error margins
     QUPphi_jqr, sigmaQUPphi_jqr = compute_pol(OEF_jkqr[2], sigmaOEF_jkqr[2])
     # Select correct aperture radii for each region
@@ -815,7 +961,6 @@ for i, sci_dir in enumerate(sci_dirs):
     regsdistOE, normfluxOE_jkq, normfluxerrOE_jkq = [], [], []
     
     
-    
     # Tracks the number of skipped templates
     skips = 0
     # Boolean for checking when the first v_HIGH and b_HIGH filter are iterated through
@@ -829,7 +974,16 @@ for i, sci_dir in enumerate(sci_dirs):
                                   np.sort(tpl_dirlst[np.logical_not(tplnamemask)])) )
     tpl_dirlst = np.delete(tpl_dirlst, np.argwhere(tpl_dirlst=="appended"))
     
-      
+    
+    # Compute the offsets which should be used for overlapping the templates
+    offsets_jkqa = np.average(pos_jkqca - pos_jkqca[0], axis=3) # [pixels]
+    offsets_jka = np.average(offsets_jkqa, axis=2) # [pixels]
+    # Initiate list of dataframes
+    framesize = (1084, 2098) # [pixels]
+    frames_jk = np.zeros([len(tpl_dirlst), 4, framesize[0], framesize[1]]) # [pixels]
+    
+    
+    
     #### Plots for all templates ####  
     for J, tpl_name in enumerate(tpl_dirlst): 
         print("\t", tpl_name)
@@ -846,6 +1000,11 @@ for i, sci_dir in enumerate(sci_dirs):
             skips += 1
             continue
         j = J-skips
+        
+        
+        # Skip tpl5 #TODO TODO TODO TODO
+        if j == 4:
+            continue        
         
         
         # Define plot parameters 
@@ -907,6 +1066,29 @@ for i, sci_dir in enumerate(sci_dirs):
         
         
         
+        # Create a list with filenames of files stored within tpldir
+        expdir_lst, expfile_lst = mk_lsts(tpl_dir + '/corrected2')
+        expfile_lst = np.sort(expfile_lst)    
+        
+        
+        
+        # Append slits for all exposures # TODO TODO TODO TODO TODO TODO TODO
+        for k, f in enumerate(expfile_lst):
+            print("\t\t", f)
+            header, datacor = extract_data(tpl_dir + '/corrected2/' + f)  
+            slits, slitw, gapw = cut_to_slits(datacor)
+            cal_slits = append_slits(slits, slitw, gapw, pos_jkqca[j,k]) 
+            
+            
+            fig1 = plt.figure(1)
+            ax1 = fig1.add_subplot(111)
+            norm = ImageNormalize(stretch=SqrtStretch())
+            image1 = ax1.imshow(cal_slits, cmap='afmhot', origin='lower', norm=norm)        
+            plt.colorbar(image1)       
+            plt.show()     
+            
+            
+        
         
         
         ############## PLOT 0 ##############     
@@ -914,9 +1096,12 @@ for i, sci_dir in enumerate(sci_dirs):
         fig0 = plt.figure(0)
         ax0 = fig0.add_subplot(111)
         print(np.mean(QUPphi0_jqr[2,j,30]))
-        if np.mean(QUPphi0_jqr[2,j,30]) > 0.2:
+        if np.mean(np.nan_to_num(QUPphi0_jqr[2,j,30])) > 0.2:
             print("POEPIEEK:\t\t{}".format(tpl_name))
             plotcolour2 = 'r' #TODO TODO TODO SKIPPED TEMPLATE 5
+            apRvsPl(ax0, r_range, pixscale, 
+                QUPphi0_jqr[2,j,30], sigmaQUPphi0_jqr[2,j,30], 
+                colour=plotcolour2, tag=" tpl{}".format(j))
         else:
             plotcolour2 = plotcolour
             apRvsPl(ax0, r_range, pixscale, 
@@ -924,6 +1109,17 @@ for i, sci_dir in enumerate(sci_dirs):
                 colour=plotcolour2, tag=lbl)
         ############## PLOT 0 ##############
         
+        
+        
+        
+        ############## PLOT 1 ##############     
+        # Plot of aperture radius vs degree of linear polarization for the standard star
+        fig1 = plt.figure(1)
+        ax1 = fig1.add_subplot(111)
+        norm = ImageNormalize(stretch=SqrtStretch())
+        image1 = ax1.imshow(np.log(frametot), cmap='afmhot', origin='lower', norm=norm)        
+        plt.colorbar(image1)
+        ############## PLOT 1 ##############
         
         
         
@@ -945,16 +1141,16 @@ for i, sci_dir in enumerate(sci_dirs):
         M = np.hypot(vectorU, vectorV)
         # Plot image
         norm = ImageNormalize(stretch=SqrtStretch())
-        image = ax5.imshow(np.log(datacor), cmap='afmhot', origin='lower', norm=norm)
+        image5 = ax5.imshow(np.log(datacor), cmap='afmhot', origin='lower', norm=norm)
         ##########plt.colorbar(image)
         # Plot vectors
         Q = ax5.quiver(vectorX, vectorY, 
                        vectorU, vectorV, 
-                       M, units='inches', pivot='mid')
+                       M, units='xy', pivot='mid')
                        #color = '#666699')
-    qk = ax5.quiverkey(Q, 0.15, 0.9, 5e-2, r'$5\%$ polarization', labelpos='N',
+    qk = ax5.quiverkey(Q, 0.15, 0.9, 5e-3, r'$0.5\%$ polarization', labelpos='N',
                        coordinates='figure', fontproperties={"size": 15})
-    plt.colorbar(image)
+    plt.colorbar(image5)
     ############## PLOT 5 ##############  
     
     
@@ -975,8 +1171,19 @@ for i, sci_dir in enumerate(sci_dirs):
     plt.ylabel(r'$\mathrm{Degree \ of \ linear \ polarization \ [-]}$', fontsize=20)
     plt.legend(loc = 'best')
     plt.tight_layout()
-    plt.savefig(savedir + '/' + 'RvsPl_alltplsV2')
+    plt.savefig(savedir + '/' + 'RvsPl')
     
+    
+    '''
+    plt.figure(1)
+    x_tickrange, y_tickrange = np.arange(0,2038,200), np.arange(1000,-1,-100)
+    plt.title("Median image")
+    plt.xticks(x_tickrange, (x_tickrange-1000)*pixscale), plt.yticks(y_tickrange,  (y_tickrange-500)*pixscale)
+    plt.xlabel(r'X [arcsec]', fontsize=20)
+    plt.ylabel(r'Y [arcsec]', fontsize=20)
+    plt.tight_layout()
+    plt.savefig(savedir + '/' + 'totimage') 
+    '''
         
     
     plt.figure(5)
@@ -993,54 +1200,7 @@ for i, sci_dir in enumerate(sci_dirs):
     plt.show()
     plt.close()
     
-    
-    '''
-    # Create tables
-    savedir = std_dir.split("/CHIP1")[0] + "/tables"
-    if not os.path.exists(savedir):
-        os.makedirs(savedir)
-    
-    os.chdir(savedir)                
-    savefile1 = open("tables1_{}".format(std_dir.split("/")[-2]),'w')
-    savefile1.write("ID \t&\t X \t&\t Y1 \t&\t Y2 \t&\t PixDist \t&\t AperRad \\\\ \n")
-    savefile1.write("\\hline \n")    
-    
-    savefile2 = open("tables2_{}".format(std_dir.split("/")[-2]),'w')
-    savefile2.write("ID \t&\t Counts \t&\t Noise \\\\ \n")
-    savefile2.write("\\hline \n")
-    
-    savefile3 = open("tables3_{}".format(std_dir.split("/")[-2]),'w')
-    savefile3.write("ID \t&\t Q/I \t&\t $Q_{err}$ \\\\ \n")
-    savefile3.write("\\hline \n")
-    
-    savefile4 = open("tables4_{}".format(std_dir.split("/")[-2]),'w')
-    savefile4.write("ID \t&\t U/I \t&\t $U_{err}$ \\\\ \n")
-    savefile4.write("\\hline \n")
-    
-    savefile5 = open("tables5_{}".format(std_dir.split("/")[-2]),'w')
-    savefile5.write("ID \t&\t $P_l$ \t&\t $P_{l_{err}}$ \\\\ \n")
-    savefile5.write("\\hline \n")
-    
-    savefile6 = open("tables6_{}".format(std_dir.split("/")[-2]),'w')
-    savefile6.write("ID \t&\t $\phi_0$ \t&\t $\phi_{0_{err}}$ \\\\ \n")
-    savefile6.write("\\hline \n")
-    
-    for q, coords in enumerate(regions):
-        if not ((q==0) or (q in np.arange(len(regions)-4,len(regions),1))):
-            continue
-        savefile1.write("{A} \t&\t {B1} \t&\t {B2} \t&\t {B3} \t&\t {C} \t&\t {D} \\\\ \n".format(A=q+1, B1=coords[0], B2=coords[1], B3=coords[2], C=[np.sum(coords[0:2]**2),coords[0]**2+coords[2]**2], D=coords[3]))
-        
-        savefile2.write("{A1} \t&\t {E1} \t&\t {E2} \\\\ \n {A2}.1 \t&\t {E11} \t&\t {E21}\\\\ \n".format(A1=q+1, A2=q+1, E1=np.round(list(OEF_jkq[0,:,0,q]),2), E11=np.round(list(OEF_jkq[1,:,0,q]),2), E2=np.round(list(sigmaOEF_jkq[0,:,0,q]),2), E21=np.round(list(sigmaOEF_jkq[1,:,0,q]),2)))
-        
-        savefile3.write("{A} \t&\t {F1} \t&\t {F2} \\\\ \n".format(A=q+1, F1=np.round(QUPphi0_jq[0,:,q],3), F2=np.round(sigmaQUPphi0_jq[0,:,q],3)))
-        
-        savefile4.write("{A} \t&\t {G1} \t&\t {G2} \\\\ \n".format(A=q+1, G1=np.round(QUPphi0_jq[1,:,q],3), G2=np.round(sigmaQUPphi0_jq[1,:,q],3)))
-        
-        savefile5.write("{A} \t&\t {H1} \t&\t {H2} \\\\ \n".format(A=q+1, H1=np.round(QUPphi0_jq[2,:,q],3), H2=np.round(sigmaQUPphi0_jq[2,:,q],3)))
-    
-        savefile6.write("{A} \t&\t {I1} \t&\t {I2} \\\\ \n".format(A=q+1, I1=np.round(QUPphi0_jq[3,:,q],3), I2=np.round(sigmaQUPphi0_jq[3,:,q],3)))
-    os.chdir(stddatadir)        
-    '''
+
 
 
 '''
