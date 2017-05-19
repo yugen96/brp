@@ -8,8 +8,8 @@ from astropy.visualization.mpl_normalize import ImageNormalize
 
 import matplotlib.pyplot as plt
 from matplotlib import cm
+from scipy import interpolate
 from scipy.optimize import curve_fit
-from scipy.interpolate import griddata
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.ticker import FormatStrFormatter
 from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes
@@ -57,8 +57,8 @@ def extract_data(fname):
 
 #################### FUNCTIONS FOR FLUX LIST COMPUTATIONS ####################
 
-    
-    
+
+
 # Calculates normalized flux/count differences between the ordinary and extraordinary target spectra or fluxes as specified on p.39 of the FORS2 user manual. The corresponding standard deviation is also computed. N.B.: The fluxes must have been derived for the same angle of the retarder waveplate!
 def fluxdiff_norm(f_or, f_ex, sigma_or, sigma_ex):
     
@@ -78,6 +78,8 @@ def fluxdiff_norm(f_or, f_ex, sigma_or, sigma_ex):
 # Finds a star's center in the neighbourhood of a certain pixel by iterating through a region surrounding this approximate pixel and storing the pixel containing the highest count rate
 def find_center(coord, data_array, window_size):
     
+    # Initiate center
+    center = coord
     # Read data_array shape and the aproximate pixel's x- and y-coordinates
     aprox_x, aprox_y = coord[0], coord[1]
     Ny, Nx = data_array.shape
@@ -94,7 +96,7 @@ def find_center(coord, data_array, window_size):
         for y in np.arange(ymin, ymax, 1):
             
             pix_val = data_array[y,x]
-            if pix_val > countmax:
+            if pix_val >= countmax:
                 countmax = pix_val
                 center = [x,y]
                 
@@ -169,7 +171,7 @@ def apersum(image, px, py, r, minAn_r, maxAn_r):
                 ansum2 += pixval**2
                 # Count number of pixels in annulus
                 ancount += 1
-            
+        
     
     # Estimate the standard deviation of the number of counts within the annulus
     av_an, av_an2 = ansum/float(ancount), ansum2/float(ancount)
@@ -202,11 +204,11 @@ def apersum(image, px, py, r, minAn_r, maxAn_r):
                     ancount += 1
                 
         
-        # Reevaluate the standard deviation and the average pixel value within the anulus
+        # Reevaluate the standard deviation and the average pixel value within the anulus        
         av_an, av_an2 = ansum/float(ancount), ansum2/float(ancount)
         sigma_an = np.sqrt(av_an2 - av_an**2)
-        
-        print("\n\n\t\t\t\titeration:\t{} \n\t\t\t\t sigma_an:\t{}".format(n, sigma_an))
+        #print("\n\n\t\t\t\titeration:\t{} \n\t\t\t\t sigma_an:\t{}".format(n, sigma_an))
+        #TODO UNCOMMENT
         
     # Compute and return calibrated aperture flux
     apscal = apsum - apcount*av_an          
@@ -507,7 +509,7 @@ def saveim_png(data, savedir, fname,
     norm = ImageNormalize(stretch=SqrtStretch())
     plt.imshow(data, cmap=colmap, origin=orig, 
                norm=norm, interpolation=interp, extent=datextent)
-    plt.colorbar(shrink=0.5, aspect=5)
+    plt.colorbar(shrink=1.0, aspect=20)
     plt.xlabel(xtag, fontsize=20), plt.ylabel(ytag, fontsize=20)
     if not title == None:
         plt.title(title, fontsize=24)
@@ -538,7 +540,7 @@ def save3Dim_png(Xgrid, Ygrid, Zdata, savedir, fname, dataplttype='scatter',
         datplt = ax.plot_surface(Xgrid, Ygrid, Zdata, cmap=colmap, 
                                  rstride=rowstride, cstride=colstride, 
                                  linewidth=lw, antialiased=False)
-        fig.colorbar(datplt, shrink=0.5, aspect=5)
+        fig.colorbar(datplt, shrink=1.0, aspect=20)
     
     # Plot fitdata
     if fit == True:
@@ -548,7 +550,7 @@ def save3Dim_png(Xgrid, Ygrid, Zdata, savedir, fname, dataplttype='scatter',
             fitplt = ax.plot_surface(Xgrid, Ygrid, fitZdata, cmap=colmap, 
                                      rstride=rowstride, cstride=colstride, 
                                      linewidth=lw, antialiased=False)
-            fig.colorbar(fitplt, shrink=0.5, aspect=5)
+            fig.colorbar(fitplt, shrink=1.0, aspect=20)
     
     # Save plot
     if not os.path.exists(savedir):
@@ -751,7 +753,6 @@ def text_plotter(x_data, y_data, text_positions, axis,txt_width,txt_height):
 # Function which embeds a data array in a larger (nrow,ncol)-frame, in order to correctly overlap images. Frameshape should be specified with its first element indicating the number of rows and its second element indicating the number of columns! Conversely, offset should be specified with its first element (X) indicating the column-wise offset and its second element (Y) indicating the row-wise offset! 'Cornerpix' define the pixel indices corresponding to the frame position where the upper left corner of the data array should be placed.
 def embed(data, frameshape, offset=np.zeros(2), cornerpix=[0,0]):
     
-    print(offset)    
     # Determine frame limits and create frame accordingly
     nrow, ncol = frameshape[0], frameshape[1]
     frame = np.zeros([nrow,ncol])
@@ -836,7 +837,6 @@ def append_slits(slits, pixoffs=None):
     for n in np.arange(0, nrofslits, 2):
         # Select pixel ofset
         pixoffXY = pixoffs[int(n/2)]
-        print("pixoffXY: {}".format(pixoffXY))
         # Select the O and E slits
         slitO, slitE = slits[n], slits[n+1]
         
@@ -882,7 +882,6 @@ def append_slits(slits, pixoffs=None):
                        offset=pixoffXY, cornerpix=upleft_corner)
         
         
-        
         # Check
         '''
         plt.figure()
@@ -904,7 +903,7 @@ def append_slits(slits, pixoffs=None):
         
         slit_diff = frameO - frameE
         slit_sum = frameO + frameE
-        cal_frame = (slit_diff / slit_sum)
+        cal_frame = (slit_diff / slit_sum)**2
         
         # Check
         '''
@@ -963,11 +962,43 @@ def paraboloid(xy, x0=0., y0=0., z0=0, a=1., b=1.):
     
     x, y = xy[0], xy[1]
     z = ((x-x0)/a)**2 + ((y-y0)/b)**2 + z0
-    zshape = z.shape
     
     return z.ravel()
+    
+    
+
+# Function for fitting a 2D gaussian to the offset array
+def gaussian2d(xy, x0, y0, z0, sigx, sigy, A):
+    
+    x, y = xy[0], xy[1]
+    tempx = (x-x0)**2 / (2 * sigx**2)
+    tempy = (y-y0)**2 / (2 * sigy**2)
+    z = A*np.exp(-tempx - tempy) + z0
+    
+    return z.ravel()
+    
 
 
+# Function 
+def compute_cd(O, E)
+
+    # Determination of c and d (Frans' method)
+    slitdiff = O - E
+    slitsum = O + E
+    grady, gradx = np.gradient(testims[0])
+    Qmin_cd, Qmin = [0,0], np.inf
+    for c in crange:
+        for d in drange:
+            
+            temp = (slitdiff + c*gradx + d*grady)**2
+            Q = apersum(temp, X38, Y38, R, anRmin, anRmax)
+            
+            if Q <= Qmin:
+                #print(Q, c, d)
+                Qmin, Qmin_cd = Q, [c,d]
+
+    Qmincd_lst.append(Qmin_cd)
+    print("FINISHED FRANS' METHOD\n\n\n")
 
 '''
 # Function which computes O - E for all slits created via cut_to_slits and inserts the results into the array 'frame' in order to recreate a single image of the sky
@@ -1001,50 +1032,9 @@ def append_slits_wrong(slits, pixoffs):
         offsets = np.mean(offsets_qa, axis=0).astype(int)[0]
         offsety = offsets[1]
         print(ny, offsety)
+'''    
         
         
-           
-        
-        
-        
-        # Select a region of E which is to be subtracted from O taking into account the offset
-        slitO, slitE = slits[n], slits[n+1]
-        
-        
-        
-        
-        # Show
-        fig11 = plt.figure(11)
-        ax11, ax12 = fig11.add_subplot(211), fig11.add_subplot(212)
-        norm = ImageNormalize(stretch=SqrtStretch())
-        image11 = ax11.imshow(slitO, cmap='afmhot', origin='lower', norm=norm) 
-        image12 = ax12.imshow(slitE, cmap='afmhot', origin='lower', norm=norm)    
-        plt.show()  
-        
-        
-        
-        
-        if offsety >= 0:
-            slit_sel = np.array([slitO[0:ny-offsety, :], slitE[offsety:ny, :]])
-        elif offsety < 0:
-            slit_sel = np.array([slitO[-offsety:ny, :], slitE[0:ny+offsety, :]])
-        slit_diff = np.diff(slit_sel, axis=0)
-        slit_sum = np.sum(slit_sel, axis=0)
-        cal_slit = (slit_diff / slit_sum)[0]
-        
-        
-        
-        # Concatenate slits
-        if n == 0:
-            cal_slits = cal_slit
-        else:
-            minNy = min([cal_slits.shape[0], cal_slit.shape[0]])
-            cal_slits = np.concatenate((cal_slits, cal_slit[0:minNy, :]), axis=0)
-            
-        
-        
-    return cal_slits
-'''
 
 
 #################### END FUNCTIONS FOR SLIT APPENDAGE ####################
@@ -1061,6 +1051,7 @@ sci_dirs = [scidatadir + "/CHIP1"]
 testdata = sci_dirs[0] + "/tpl8/corrected2/FORS2.2011-05-04T01:31:46.334_COR.fits" # j=7, k=1
 # Directory for saving plots
 plotdir = "/home/bjung/Documents/Leiden_University/brp/data_red/plots"
+imdir = "/home/bjung/Documents/Leiden_University/brp/data_red/images"
 
 # Specify bias and masterflat
 header, Mbias = extract_data(datadir + "/masterbias.fits")
@@ -1125,7 +1116,7 @@ testslitshapes = np.array([testslits[0].shape, testslits[1].shape])
 minelmarg = np.argmin(np.prod(testslitshapes, axis=1))
 minNy, minNx = testslitshapes[minelmarg]
 
-# Determine datapoints on the slit with the smalles shape
+# Determine datapoints on the slit which has the smallest shape
 xpoints = np.arange(0, testslits[minelmarg].shape[1])
 ypoints = np.arange(0, testslits[minelmarg].shape[0])
 gridx, gridy = np.meshgrid(xpoints, ypoints)
@@ -1138,49 +1129,84 @@ Ovalues, Evalues = testslitO.ravel(), testslitE.ravel()
 interpx = np.linspace(0, testslits[minelmarg].shape[1], 10*testslits[minelmarg].shape[1])
 interpy = np.linspace(0, testslits[minelmarg].shape[0], 10*testslits[minelmarg].shape[0])
 interpgrid_x, interpgrid_y = np.meshgrid(interpx, interpy)
+# Griddata interpolation
+interpO = interpolate.griddata(slitpoints, Ovalues, (interpgrid_x,interpgrid_y), method='cubic')
+interpE = interpolate.griddata(slitpoints, Evalues, (interpgrid_x,interpgrid_y), method='cubic')
+testinterps = [interpO, interpE] #TODO TODO TODO TODO CHANGE?
 
 
-# Interpolation
-interpO = griddata(slitpoints, Ovalues, (interpgrid_x,interpgrid_y), method='cubic')
-interpE = griddata(slitpoints, Evalues, (interpgrid_x,interpgrid_y), method='cubic')
-testinterps = [interpO, interpE]
+
+'''
+####################### EVALUATION OF DIFFERENT INTERPOLATION METHODS #######################
+# 1d spline #TODO
+tck_1d = interpolate.splrep(xpoints, testslitO[27], s=0)
+interpO3_1d = interpolate.splev(interpx, tck_1d, der=0)
+# Compute the relative interpolation errors
+diff1_norm = (interpO[270,xpoints*10] - testslitO[27]) / testslitO[27]
+diff3_norm = (interpO3_1d[xpoints*10] - testslitO[27]) / testslitO[27] 
+# PLOT
+plt.figure()
+plt.plot(xpoints, diff1_norm, 'r', label='2D cubic spline')
+plt.plot(xpoints, diff3_norm, 'g', label='1D cubic spline')
+plt.legend(loc='best')
+plt.xlabel(r"X [pixels]", fontsize=20), plt.ylabel(r"Relative Error [--]", fontsize=20)
+plt.title("Interpolation Errors")
+plt.savefig(plotdir + "/NGC4696,IPOL/interp/interpErrs.png")
+plt.show()
+plt.close()
+####################### END evaluation of different interpolation methods #######################
+''' # TODO EVALUATE MORE FORMS OF INTERPOLATION
 
 
-# Bin interpolations back to original shape
-evalinterp_arr = np.zeros(testslits[minelmarg].shape)
-for origrow, row in enumerate(np.arange(0, interpO.shape[0], 10)):
-    for origcol, col in enumerate(np.arange(0, interpO.shape[1], 10)):
-        
-        arrbin = interpO[row:row+10,col:col+10]
-        evalinterp_arr[origrow,origcol] = np.mean(arrbin)
-        
-        
-        
+
 # Save original slits, interpolations and evalutions of interpolations to fits files
-interpsavedir = plotdir + "/NGC4696,IPOL/interp"
 # Save initial slits
-savefits(testslits[0], interpsavedir, "initialO_{}".format('v0'))
-savefits(testslits[1], interpsavedir, "initialE_{}".format('v0'))
-# Save interpolations and evaluations of interpolations
-savefits(interpO, interpsavedir, "interpO_{}".format('v0'))
-savefits(evalinterp_arr-testslitO, interpsavedir, "interpOeval_{}".format('v0'))      
-        
-
+savefits(testslits[0], imdir+"/interp", "initialO")
+savefits(testslits[1], imdir+"/interp", "initialE")
 
 
 
 # Compute the normalized flux of star 38 for different offsets
-offset_lst, fitparab_lst = [], []
+offset_lst, fitparab_lst, fitgauss_lst, Qmincd_lst = [], [], [], []
 for l, testims in enumerate([testslits,testinterps]):
     
-    # Determine dx- and dy-ranges
-    if l == 0:
-        [dxrange, dyrange] = [np.arange(-10,11), np.arange(-10,11)] 
-    if l == 1:
-        [dxrange, dyrange] = [np.arange(-30,31), np.arange(-30,31)] 
-    # Initialize array to store the normalized flux differences of star 38 corresponding to certain offsets in x and y
-    offset_arr = np.zeros([len(dxrange),len(dyrange)])    
     
+    # Determine dx- and dy-ranges and parameters
+    if l == 0:
+        continue
+        # Define save directories
+        pltsavedir = plotdir + "/NGC4696,IPOL/offsetopt/noninterp"
+        imsavedir = imdir + "/offsetopt/noninterp"   
+        # Set offset ranges 
+        [dxrange, dyrange] = [np.arange(-4,5), np.arange(-2,7)] 
+        # Determine centers in testims and interim
+        [X38, Y38] = find_center([807,24], testims[0], 15)
+        # Set aperture sum parameters
+        [R, anRmin, anRmax] = [11, 12, 16]    
+        
+        # c and d ranges for Frans' method
+        crange, drange = np.linspace(0, 0.5, 100), np.linspace(1,2,100)
+            
+    if l == 1:
+        # Define save directories
+        pltsavedir = plotdir + "/NGC4696,IPOL/offsetopt/interp"
+        imsavedir = imdir + "/offsetopt/interp"
+        # Set offset ranges    
+        [dxrange, dyrange] = [np.arange(-20,20), np.arange(-4,37)] 
+        # Determine centers in testims and interim
+        [X38, Y38] = find_center([8053,269], testims[0], 75)
+        # Set aperture sum parameters
+        [R, anRmin, anRmax] = np.array([85, 90, 111]) 
+        
+        # c and d ranges for Frans' method
+        crange, drange = np.linspace(-2, 2, 100), np.linspace(-2,2,100)   
+    
+        
+    
+    # Insert dx=0 and dy=0 for calculation of a0 and b0
+    dxrange, dyrange = np.insert(dxrange,0,0), np.insert(dyrange,0,0)
+    # Initialize array to store the normalized flux differences of star 38 corresponding to certain offsets in x and y
+    offset_arr = np.zeros([len(dyrange),len(dxrange)])
     
     # Determine normalized flux differences of star 38
     for m, dy in enumerate(dyrange):
@@ -1188,133 +1214,176 @@ for l, testims in enumerate([testslits,testinterps]):
             
             # Compute nomalized flux for whole image
             interim = append_slits(testims, [[dx,dy]])
-            
-            # Determine aperture properties for total normalized flux calculations
-            if l == 0:
-                approxc = [807,24]
-                [R, anRmin, anRmax] = [11, 12, 16]
-            if l == 1:
-                approxc = [8053,272]
-                [R, anRmin, anRmax] = 10*np.array([11, 12, 16])
-            
-            # Determine centers in testims and interim
-            [X38, Y38] = find_center(approxc, testims[0], 15)
-            [X38_2, Y38_2] = find_center(approxc, interim, 15)
-            print([X38, Y38], [X38_2, Y38_2])
+            # Save to fits file 
+            # savefits(interim, imsavedir, "append38_tpl8_dx{}dy{}".format(dx,dy)) #TODO REMOVE WHEN SPACE
             
             # Determine normalized flux
             F38 = apersum(interim, X38, Y38, R, anRmin, anRmax)
             offset_arr[m,n] = F38
-    offset_lst.append(offset_arr)
-    print("\n\n\nEND NORMFLUX CALCULATION {}\n\n\n".format(l))
+    offset_lst.append(offset_arr[1::,1::])
+    print("\n\n\nEND NORMFLUX CALCULATION {}\n\n\n".format(l+1))
     
     
     # Fit parameter trial input
     if l == 0:
-        p0 = (-1,-1,-4.07,-2.45,-2.41) #(x0, y0, z0, a, b)
+        # Paraboloid fit
+        tempZ1 = offset_arr - np.min(offset_arr)
+        tempZ2, tempZ3 = tempZ1[dyrange==0,:][0,:], tempZ1[:,dxrange==0][:,0]
+        a0 = (np.abs(dxrange[tempZ2!=0]) / np.sqrt(tempZ2[tempZ2!=0])).mean()
+        b0 = (np.abs(dyrange[tempZ3!=0]) / np.sqrt(tempZ3[tempZ3!=0])).mean()
+        p0 = (0,2,np.min(offset_arr),a0,b0) #(x0, y0, z0, a, b)
+        # Gaussian fit
+        p0_gauss = (0,2,23,2,2,np.min(offset_arr)-23) #(x0, y0, z0, sigx, sigy, Px, Py, A)
+        
     if l == 1:
-        tempZ = offset_arr - np.min(offset_arr)
-        a0 = (np.abs(dxrange) / np.sqrt(tempZ[dyrange==0,:][0,:])).mean()
-        b0 = (np.abs(dyrange) / np.sqrt(tempZ[:,dxrange==0][:,0])).mean()
-        p0 = (-3,-18,np.min(offset_arr),a0,b0) #(x0, y0, z0, a, b)
+        # Paraboloid fit
+        tempZ1 = offset_arr - np.min(offset_arr)
+        tempZ2, tempZ3 = tempZ1[dyrange==0,:][0,:], tempZ1[:,dxrange==0][:,0]
+        a0 = (np.abs(dxrange[tempZ2!=0]) / np.sqrt(tempZ2[tempZ2!=0])).mean()
+        b0 = (np.abs(dyrange[tempZ3!=0]) / np.sqrt(tempZ3[tempZ3!=0])).mean()
+        p0 = (2,17,np.min(offset_arr),a0,b0) #(x0, y0, z0, a, b)
+        # Gaussian fit
+        p0_gauss = (3,19,np.max(offset_arr),2,2,np.min(offset_arr)-30) #(x0, y0, z0, sigx, sigy, Px, Py, A)
     
     
-    # Set fit initials (hardcoded using popt after first try)
+    # Omit dx=0 and dy=0 (these were necessary for calculating p0 only)
+    offset_arr = offset_arr[1::,1::]
+    dxrange, dyrange = dxrange[1::], dyrange[1::]
+    
+    
     # Conduct parabolic fit to offset_arr
     fitdata = offset_arr.ravel()
     dxgrid, dygrid = np.meshgrid(dxrange, dyrange)
     popt, pcov = curve_fit(paraboloid, (dxgrid, dygrid), fitdata, p0)
+    popt_gauss, pcov_gauss = curve_fit(gaussian2d, (dxgrid, dygrid), fitdata, p0_gauss)
+    print("Absolute paraboloid min.:\t\t(dx,dy)={}".format(popt[[0,1]]))
+    print("Absolute 2dGauss min.:\t\t(dx,dy)={}".format(popt_gauss[[0,1]]))
+    
+    
+    # Determine the difference between the paraboloid model and the flux data
     fitparab = paraboloid((dxgrid, dygrid), *popt).reshape(offset_arr.shape)
+    modeval = offset_arr - fitparab
+    # Determine the difference between the 2dGaussian model and the flux data
+    fitgauss2d = gaussian2d((dxgrid, dygrid), *popt_gauss).reshape(offset_arr.shape)
+    modeval_gauss = offset_arr - fitgauss2d
     # Append result to list
     fitparab_lst.append(fitparab)
+    fitgauss_lst.append(fitgauss2d)
     
     
-    # Create final slit image
+    # Create final slit image using the paraboloid fit
     offsetopt = ( np.unravel_index(np.argmin(offset_arr), offset_arr.shape) - 
                   np.array([ len(dxrange[dxrange<0]) , len(dyrange[dyrange<0]) ]) )
-    offsetopt_fit = ( np.unravel_index(np.argmin(fitparab), fitparab.shape) - 
-                  np.array([ len(dxrange[dxrange<0]) , len(dyrange[dyrange<0]) ]) )
-    finalim = append_slits(testims, np.tile(offsetopt_fit,[len(testims),1]))
+    offsetopt_fit = np.rint(popt[0:2]).astype(int)
+    finalim = append_slits(testims, np.tile(np.round(offsetopt_fit),[len(testims),1]))
+    # Create final slit image using guassian fit
+    offsetopt_fitgauss = np.rint(popt_gauss[0:2]).astype(int)
+    finalim_gauss = append_slits(testims, np.tile((offsetopt_fitgauss),[len(testims),1]))
     
     
     
     # PLOTS
-    # Define save directory
-    savedir = plotdir + "/NGC4696,IPOL/offsetopt"
-    # Save offset_arr as 2D png
-    if l == 0:
-        appendstr = "orig"
-    if l == 1:
-        appendstr = "interp"
-    saveim_png(offset_arr, savedir, "offsetopt38_tpl8"+appendstr, colmap='coolwarm', orig='lower',
+    saveim_png(offset_arr, pltsavedir+"/", "offsetopt38_tpl8v2", 
+               colmap='coolwarm', orig='lower',
                datextent=[np.min(dxrange), np.max(dxrange), np.min(dyrange), np.max(dyrange)],
                xtag=r"$\delta_X$", ytag=r"$\delta_Y$")
     # Save offset_arr and paraboloid fit as 3D png
-    save3Dim_png(dxgrid, dygrid, offset_arr, savedir, "offsetopt38_tpl8_3D"+appendstr, 
+    save3Dim_png(dxgrid, dygrid, offset_arr, pltsavedir, "offsetopt38_tpl8_3Dv2", 
                  fit=True, fitZdata=fitparab, 
-                 xtag=r"$\delta_X$", ytag=r"$\delta_Y$", ztag=r"$(O+E) / (O-E)$")
-                 
-                 
-    # Save finalim to fits file
-    savefits(finalim, savedir, "append38_tpl8"+appendstr)
-             
-             
+                 xtag=r"$\delta_X$", ytag=r"$\delta_Y$", ztag=r"$\left| (O+E) / (O-E) \right|$")
+    save3Dim_png(dxgrid, dygrid, offset_arr, pltsavedir, "offsetopt38_tpl8_gauss3Dv2", 
+                 fit=True, fitZdata=fitgauss2d, 
+                 xtag=r"$\delta_X$", ytag=r"$\delta_Y$", ztag=r"$\left| (O+E) / (O-E) \right|$")
+                
+    
+    
+    # Save model evaluations to fits file
+    savefits(modeval, imsavedir, "modevalV2")
+    savefits(modeval_gauss, imsavedir, "modeval_gaussV2")
+    # Save Gaussian finalim to fits file
+    savefits(finalim_gauss, imsavedir, "finalim_dx{}dy{}".format(offsetopt_fitgauss[0],
+                                                                 offsetopt_fitgauss[1]))
+    
 
 
-
-
-
-
-# FINAL IMAGE ISN'T CORRECT! SEE NOTES 11-06-17 + TEST2.PY FOR DIAGNOSTIC AFTER RUNNING TEST.PY within python3 in terminal
-# Save finalimage to fits file
-'''
-for j, ytje in enumerate(np.arange(offsetopt[1]-10, offsetopt[1]+11)):
-    offsetje = [0, ytje]
-    print(offsetje)
-    anim2 = append_slits(testslits, np.tile(offsetje,[len(testslits),1]))
-    [X38, Y38] = find_center([807,24], testslits[1], 15)
-    print([X38, Y38])
-    F38 = apersum(anim2, X38, Y38, 11, 14, 20)
-    print("apersum:\t\t", F38)
-    if j!=0:
-        print(np.sum(anim1 == anim2), len(anim2.ravel()))
-    savefits(anim2, savedir, "appended38_tpl8_v{}".format(j))
-    anim1=anim2
-'''
 
 
 
 '''
-Xrange, Yrange = np.arange(-10,11), np.arange(-10,11)
-X, Y = np.meshgrid(Xrange, Yrange)
-A, B = np.tile(2,X.shape), np.tile(2,Y.shape)
-Z = paraboloid((X,Y),0,0,A,B)
+# Application of second method for calculating offsets
+q = testslitO - testslitE
+grady, gradx = np.gradient(testslitO)
 
-B0temp = np.abs( Yrange / np.sqrt(Z[Xrange==0]) )
-B0 = np.median( B0temp[B0temp!=np.nan] )
-print(B0)
+Qmin_cd, Qmin = [0,0], np.inf
+for c in np.linspace(0, 0.5, 100):
+    for d in np.linspace(1,2,100):
+        
+        tempim = 
+        
+        [X38, Y38] = find_center(approxc, testims[0], searchR)
+        Q = apersum(interim, X38, Y38, R, anRmin, anRmax)
+        
+        apersum( (q + c*gradx + d*grady)**2 )
+        print(Q)
+        
+        if Q <= Qmin:
+            print(Q, c, d)
+            Qmin = Q
+            Qmin_cd = [c,d]
+            im = q + c*gradx + d*grady
 
-fig = plt.figure()
-ax = fig.gca(projection='3d')
-surf = ax.plot_surface(X, Y, Z, cmap='afmhot', 
-                       linewidth=0, antialiased=False)
-fig.colorbar(surf, shrink=0.5, aspect=5)
+
+plt.figure(0)
+plt.imshow(im, cmap='afmhot', origin='lower')
+plt.colorbar()
 plt.show()
-plt.close()
+[X38, Y38] = find_center(approxc, testims[0], searchR)
+            print([X38, Y38])
+            
+            # Determine normalized flux
+            F38 = apersum(interim, X38, Y38, R, anRmin, anRmax)
 '''
 
 
 
+'''
+testdiff = testslitO - testslitE
+grady, gradx = np.gradient(testslitO)
+grady2, gradx2 = np.gradient(testslitO + testslitE)
+
+plt.figure(0)
+plt.imshow(testdiff, cmap='afmhot', origin='lower')
+plt.colorbar()
+
+plt.figure(1)
+plt.imshow(gradx, cmap='afmhot', origin='lower')
+plt.colorbar()
+
+plt.figure(2)
+plt.imshow(grady, cmap='afmhot', origin='lower')
+plt.colorbar()
+plt.show()
+
+testQ = (testdiff + Qmin_cd[0]*gradx + Qmin_cd[1]*grady)**2
+testQ2 = testQ / (testslitO + testslitE)**2
+plt.figure(3)
+plt.imshow(testQ, cmap='afmhot', origin='lower')
+plt.colorbar()
+plt.show()
+''' # q_ij (fig0), gradx (fig1) en grady (fig2)
 
 
 
 
 
+'''
+finalim_test = append_slits([interpO, interpE], np.tile(offsetopt_fitgauss,[len(testims),1]))
 
-
-
-
-
+plt.figure(10)
+plt.imshow(np.log(finalim_gauss), cmap='afmhot', origin='lower')
+plt.colorbar()
+plt.show()
+'''
 
 
 
