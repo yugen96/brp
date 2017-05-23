@@ -1,5 +1,6 @@
 import numpy as np
 from astropy.io import fits
+from itertools import product as carthprod
 import shutil
 import os
 
@@ -758,7 +759,7 @@ def embed(data, frameshape, offset=np.zeros(2), cornerpix=[0,0]):
     frame = np.zeros([nrow,ncol])
     
     # Determine data shape
-    nrow_dat, ncol_dat = data.shape[0], data.shape[1]
+    nrow_dat, ncol_dat = data.shape
     
     # Embed the data array in the frame, using the specified offset. NOTE: x=columns and y=rows!
     frame[cornerpix[0]+offset[1]:cornerpix[0]+offset[1]+nrow_dat, 
@@ -845,32 +846,31 @@ def align_slits(slits, pixoffs=None):
         # Select pixel ofset
         pixoffXY = pixoffs[int(n/2)]
         # Select the O and E slits
-        slitE, slitO = slits[n], slits[n+1]
-        
+        Eslit, Oslit = slits[n], slits[n+1]
         
         
         # Check
         '''
         plt.figure()
         norm = ImageNormalize(stretch=SqrtStretch())
-        plt.imshow(slitO, cmap='afmhot', origin='lower', norm=norm)
+        plt.imshow(Oslit, cmap='afmhot', origin='lower', norm=norm)
         plt.colorbar()
         plt.show()
         plt.close() 
         # Check
         plt.figure()
         norm = ImageNormalize(stretch=SqrtStretch())
-        plt.imshow(slitE, cmap='afmhot', origin='lower', norm=norm)
+        plt.imshow(Eslit, cmap='afmhot', origin='lower', norm=norm)
         plt.colorbar()
         plt.show()
         plt.close() 
         '''
        
         
-        '''
+        
         # Determine slit dimensions
-        Nx = min(slitO.shape[1], slitE.shape[1])
-        Ny = min(slitO.shape[0], slitE.shape[0])
+        Nx = min(Oslit.shape[1], Eslit.shape[1])
+        Ny = min(Oslit.shape[0], Eslit.shape[0])
         # Determine minimum slit dimensions
         if Nx < minNx:
             minNx = Nx
@@ -878,15 +878,15 @@ def align_slits(slits, pixoffs=None):
         if Ny < minNy:
             minNy = Ny
             adjust_calslits = True
-        ''' #TODO REMOVE IF WORKS
+        #TODO REMOVE IF WORKS
         
         
         # Embed the slits in a bigger frame,
-        framesize = 1.5*np.array(slitO.shape)
-        upleft_corner = 0.25*framesize
-        frameO = embed(slitO, framesize, 
+        framesize = (2*np.array(Oslit.shape)).astype(int)
+        upleft_corner = (0.25*framesize).astype(int)
+        frameO = embed(Oslit, framesize, 
                        offset=[0,0], cornerpix=upleft_corner)
-        frameE = embed(slitE, framesize, 
+        frameE = embed(Eslit, framesize, 
                        offset=pixoffXY, cornerpix=upleft_corner)
         
         
@@ -908,7 +908,6 @@ def align_slits(slits, pixoffs=None):
         '''
         
         
-        
         slit_diff = frameO - frameE
         slit_sum = frameO + frameE
         cal_frame = (slit_diff / slit_sum)**2
@@ -927,7 +926,7 @@ def align_slits(slits, pixoffs=None):
         # Select original O data region
         cal_slit = cal_frame[upleft_corner[0]:upleft_corner[0]+Ny,
                              upleft_corner[1]:upleft_corner[1]+Nx]
-        
+                             
         
         
         # Check
@@ -966,6 +965,27 @@ def align_slits(slits, pixoffs=None):
 
 
 
+# Function for interpolating a data-array via interpolate.griddata
+def interp(data, new_Nx, new_Ny):
+    
+    # Determine old grid
+    Ny, Nx = data.shape
+    x, y = np.arange(0, Nx), np.arange(0, Ny)
+    xgrid, ygrid = np.meshgrid(x,y)
+    points = np.dstack( (xgrid.ravel(),ygrid.ravel()) )[0]
+    values = data.ravel()
+    
+    # Set up new grid
+    X, Y = np.linspace(0, Nx, new_Nx), np.linspace(0, Ny, new_Ny)
+    Xgrid, Ygrid = np.meshgrid(X,Y)
+       
+    # Compute interpolation
+    interp = interpolate.griddata(points, values, (Xgrid,Ygrid), method='cubic')
+    
+    return interp
+    
+
+
 # Function for fitting a paraboloid to the offset array
 def paraboloid(xy, x0=0., y0=0., z0=0, a=1., b=1.):
     
@@ -989,7 +1009,9 @@ def gaussian2d(xy, x0, y0, z0, sigx, sigy, A):
 
 
 # Function which computes 
-def compute_cd(O, E, crange, drange, center, R, anRmin, anRmax):
+def compute_cd(O, E, crange, drange, center, R, anRmin, anRmax, 
+               savetofits=False, savedir=None, 
+               alignname=None, gradoptname=None, alignims=None, interpfact=1):
     
     # Determination of c and d (gradient method)
     slitdiff = O - E
@@ -1004,10 +1026,54 @@ def compute_cd(O, E, crange, drange, center, R, anRmin, anRmax):
             
             if Q <= Qmin:
                 #print(Q, c, d)
-                Qmin, Qmin_cd = Q, [c,d]
-                
-    print("FINISHED GRADIENT METHOD\n\n\n")
+                Qmin, Qmin_cd = Q, np.array([c,d])
+                gradopt_norm = temp / (O+E)**2
+    
+    if savetofits:
+        # Save aligned slits with offset (dx,dy)=(c,d)
+        aligned = align_slits(alignims, [np.rint(interpfact*Qmin_cd).astype(int)])
+        savefits(aligned, savedir, alignname+"dx{}dy{}".format(int(np.rint(Qmin_cd[0])),
+                                                               int(np.rint(Qmin_cd[1]))))
+        # Save norm gradopt_norm
+        savefits(gradopt_norm, savedir, gradoptname+"dx{}dy{}".format(int(np.rint(Qmin_cd[0])),
+                                                                      int(np.rint(Qmin_cd[1]))))
+    
     return(Qmin, Qmin_cd)
+    
+    
+
+# Function for fitting a bivariate polynomial to a dataset z
+def polyfit2d(x, y, z, order=3):
+    
+    # Define an array G in which to store the polynomial variables (power comb. of x and y)
+    ncols = (order + 1)**2
+    G = np.zeros((x.size, ncols))
+    
+    # Fill G with combinations of powers of x and y
+    ij = carthprod(range(order+1), range(order+1))
+    for k, (i,j) in enumerate(ij):
+        G[:,k] = x**i * y**j
+    
+    # Find a least squares fit of G with respect to the data z
+    m, _, _, _ = np.linalg.lstsq(G, z)
+    
+    return m
+
+# Function for evaluating a third order polynomial m at the points x and y
+def polyval2d(x, y, m):
+    
+    # Define the order of the polynomial
+    order = int(np.sqrt(len(m))) - 1
+    
+    # Compute the polynomial
+    ij = carthprod(range(order+1), range(order+1))
+    z = np.zeros_like(x)
+    for a, (i,j) in zip(m, ij):
+        z += a * x**i * y**j
+        
+    return z
+    
+
 
 '''
 # Function which computes O - E for all slits created via cut_to_slits and inserts the results into the array 'frame' in order to recreate a single image of the sky
@@ -1078,8 +1144,17 @@ star_lsts = [[[335, 904, 807, 5], [514, 869, 773, 7], [1169, 907, 811, 5], [1383
               [634, 184, 91, 9], [642, 134, 41, 7], [838, 175, 82, 8], [990, 140, 48, 11], 
               [1033, 157, 65, 9], [1172, 147, 55, 7], [1315, 164, 71, 8], [1549, 164, 72, 13]]] 
 star_lsts = np.array(star_lsts) # 35 stars in total (42-7)
+# Same list for appended Oslit (Y2 and R ommitted)
+star_lstsAPP = [[[152, 382], [331, 347], [987, 387], [1201, 355], 
+              [159, 274], [186, 282], [180, 304], [715, 284], 
+              [1652, 287], [45, 206], [172, 176], [194, 189], 
+              [236, 203], [353, 174], [389, 224], [913, 192], 
+              [995, 212], [304, 104], [454, 117], [1031, 130], 
+              [1065, 112], [1480, 92], [142, 20], [429, 74], 
+              [452, 71], [458, 21], [666, 63], [806, 26], 
+              [850, 43], [989, 34], [1132, 50], [1366, 52]]] #TODO REMOVE IF NOT USED
 # List specifying the (axis1) indices of the first stars on each slit
-slit_divide = np.array([0, 4, 9, 17, 22])
+slit_divide = np.array([1, 5, 10, 18, 23])
 
 
 
@@ -1091,6 +1166,7 @@ pixscale = 0.126 #[arcsec/pixel]
 
 # Boolean variable for switchin on polarization computations of selected stars
 compute_anew = False
+calc_cd, calc_offs = True, False
 
 # ESO given polarizations
 VelaBV_PlPhi = [[0., 0.],[0., 0.]] # [-], [deg]
@@ -1137,6 +1213,7 @@ testslitshapes = np.array([testslits[0].shape, testslits[1].shape]) #TODO TODO G
 minelmarg = np.argmin(np.prod(testslitshapes, axis=1))
 minNy, minNx = testslitshapes[minelmarg]
 
+'''
 # Determine datapoints on the slit which has the smallest shape
 xpoints = np.arange(0, testslits[minelmarg].shape[1])
 ypoints = np.arange(0, testslits[minelmarg].shape[0])
@@ -1154,6 +1231,9 @@ interpgrid_x, interpgrid_y = np.meshgrid(interpx, interpy)
 interpO = interpolate.griddata(slitpoints, Ovalues, (interpgrid_x,interpgrid_y), method='cubic')
 interpE = interpolate.griddata(slitpoints, Evalues, (interpgrid_x,interpgrid_y), method='cubic')
 testinterps = [interpO, interpE] #TODO TODO TODO TODO CHANGE?
+''' #TODO USE custom interp function
+
+
 
 
 
@@ -1190,16 +1270,23 @@ savefits(testslits[1], imdir+"/interp", "initialE")
 # Create temporary aligned image
 slitshapes = np.array([np.array(slits[i].shape) for i in range(0,10,1)])
 aligntemp = np.concatenate([slits[i+1] for i in range(0,10,2)], axis = 0)
+# Recall previous c- and dscapes
+header, cscape_prev = extract_data(imdir+"/offsetopt/cdscapes/cscape_tpl8.fits")
+header, dscape_prev = extract_data(imdir+"/offsetopt/cdscapes/dscape_tpl8.fits")
 
 
 # Apply gradient method on all stars and create 
 Qopts, opts_cd = [], []
 n, cscape, dscape = 8, np.zeros(aligntemp.shape), np.zeros(aligntemp.shape)
 for starno, starpar in enumerate(star_lsts[0]):
+    print("\n\nStarno:\t\t{}".format(starno+1))
     
-       
+    # Check whether to compute cdscapes
+    if calc_cd == False:
+        break
+    
     # Check whether current star is the first one appearing on a slitpair
-    if starno in slit_divide:
+    if (starno+1) in slit_divide:
         # Extract ordinary and extraordinary slit
         slitE, slitO = slits[n], slits[n+1]
         # Adjust shape so that O and E have equal size
@@ -1211,39 +1298,120 @@ for starno, starpar in enumerate(star_lsts[0]):
         print("Slit pair {}".format(n/2))
         n -= 2
     
+    
     # Compute stellar location on O slit
-    slitOcent = find_center([starpar[0]-chip_xyranges[0][0], upedgeO-starpar[1]],
-                           slitO, 15)
+    slitOcent = find_center([starpar[0]-chip_xyranges[0][0], starpar[1]-lowedgeO],
+                             slitO, 25)
     appendedOcent = find_center([slitOcent[0], 
                             slitOcent[1]+np.sum(slitwidths[[m+1 for m in np.arange(0,n+2,2)]])],
-                            aligntemp, 15)
+                            aligntemp, 25)
     print("appendedOcent:\t\t", appendedOcent)
-                            
+    
+    
+
+    # Cut out square regions on both slits centered around the current star
+    minx, maxx, miny, maxy = (max(slitOcent[0]-35,0), min(slitOcent[0]+35,Nx),
+                              max(slitOcent[1]-35,0), min(slitOcent[1]+35,Ny))
+    cutoutO, cutoutE = slitO[::,minx:maxx+1], slitE[::,minx:maxx+1]
+    newcent = slitOcent - np.array([minx,miny])
+    # Determine interpolations
+    interpO = interp(cutoutO, 10*cutoutO.shape[1], 10*cutoutO.shape[0])
+    interpE = interp(cutoutE, 10*cutoutE.shape[1], 10*cutoutE.shape[0])
+
+    
+    # Recall previous c and d values for current star
+    cval_prev = cscape_prev[appendedOcent[1], appendedOcent[0]]
+    dval_prev = dscape_prev[appendedOcent[1], appendedOcent[0]]
+    # Determine c and d values to use for evaluation
+    crange = np.linspace(cval_prev-0.5, cval_prev+0.5, 21) #TODO adjust to cval_prev
+    drange = np.linspace(dval_prev-0.5, dval_prev+0.5, 21) #TODO adjust to dval_prev 
+    
+    
     # Compute the c and d parameters which optimize overlap using gradient method
-    Qopt, opt_cd = compute_cd(slitO, slitE, 
-                              np.linspace(-2,2,21), np.linspace(-2,2,21),
-                              slitOcent, starpar[3], starpar[3], 2*starpar[3])
+    Qopt, opt_cd = compute_cd(cutoutO, cutoutE, crange, drange,
+                              newcent, starpar[3], starpar[3], 2*starpar[3],
+                              savetofits=True, savedir=imdir+"/offsetopt/cdscapes", #TODO savetofits
+                              alignname="cdAlign_star{}".format(starno+1),
+                              gradoptname="gradopt_star{}".format(starno+1), 
+                              alignims=[interpO,interpE], interpfact=10)
     Qopts.append(Qopt), opts_cd.append(opt_cd)
     print("Qopt, opt_cd:\t\t", Qopt, opt_cd)
+    
+    
+    # TODO Generalize or remove:
+    if starno+1 == 28:
+        for extrac,extrad in carthprod(range(-1,2),range(-1,2)):
+            # Define trial c and d's
+            newc, newd = np.rint(opt_cd).astype(int)+np.array([extrac,extrad])
+            
+            # Save aligned slits using trial c and d
+            temp = align_slits([slitO,slitE], [[newc, newd]])
+            savefits(temp, imdir+"/offsetopt/cdscapes", 
+                           "tempAlign_star{}dx{}dy{}".format(starno+1,int(np.rint(newc)),
+                                                                    int(np.rint(newd))))
+                           
+            # Save gradopt_norm using trial c and d
+            temp2 = ( ((slitO-slitE) - newc*np.gradient(slitO)[1] - newd*np.gradient(slitO)[0])**2 /
+                                                    (slitO+slitE)**2 )
+            savefits(temp2, imdir+"/offsetopt/cdscapes", 
+                            "tempgradopt_star{}c{}d{}".format(starno+1,int(np.rint(newc)),
+                                                                   int(np.rint(newd))))
+            
     
     # Update c- and dscape
     cscape[appendedOcent[1], appendedOcent[0]] = opt_cd[0]
     dscape[appendedOcent[1], appendedOcent[0]] = opt_cd[1]
-    
+
+
+
+# Check whether to run cdscape polynomial fit
+if calc_cd:   
     # Determine x and y coordinates of evaluated points
     c_xycoord, d_xycoord = cscape.nonzero(), dscape.nonzero()
     cpoints, dpoints = np.dstack(c_xycoord)[0], np.dstack(d_xycoord)[0]
-    # Cubic spline interpolations
+    c_x, c_y, d_x, d_y = cpoints[:,1], cpoints[:,0], dpoints[:,1], dpoints[:,0]
+    # Third order bivariate polynomial fit
+    polynom_c = polyfit2d(c_x, c_y, cscape[c_xycoord])
+    polynom_d = polyfit2d(d_x, d_y, cscape[d_xycoord])
+    # Compute gridpoints for evaluation
     scapex, scapey = np.arange(0,cscape.shape[1],1), np.arange(0,cscape.shape[0],1)
     scape_xgrid, scape_ygrid = np.meshgrid(scapex, scapey)
-    c_newscape = interpolate.griddata(cpoints, cscape[c_xycoord], 
-                                      (scape_xgrid, scape_ygrid), method='cubic')
-    d_newscape = interpolate.griddata(dpoints, dscape[d_xycoord], 
-                                      (scape_xgrid, scape_ygrid), method='cubic')    
-    
-    
-    
+    # Evalutate fitted polynomial at gridpoints
+    polyfitdata_c = polyval2d(scape_xgrid, scape_ygrid, polynom_c)
+    polyfitdata_d = polyval2d(scape_xgrid, scape_ygrid, polynom_d)
 
+
+
+
+
+
+
+'''
+# Cubic spline interpolations
+scapex, scapey = np.arange(0,cscape.shape[1],1), np.arange(0,cscape.shape[0],1)
+scape_xgrid, scape_ygrid = np.meshgrid(scapex, scapey)
+c_interpscape = interpolate.griddata(cpoints, cscape[c_xycoord], 
+                                  (scape_xgrid, scape_ygrid), method='cubic')
+d_interpscape = interpolate.griddata(dpoints, dscape[d_xycoord], 
+                                  (scape_xgrid, scape_ygrid), method='cubic')    
+'''
+
+savefits(cscape, imdir+"/offsetopt/cdscapes", "cscape_tpl8")
+savefits(dscape, imdir+"/offsetopt/cdscapes", "dscape_tpl8")
+savefits(polyfitdata_c, imdir+"/offsetopt/cdscapes", "cscapefitted_tpl8")
+savefits(polyfitdata_d, imdir+"/offsetopt/cdscapes", "dscapefitted_tpl8")
+
+plt.imshow(polyfitdata_c, origin='lower')
+#plt.imshow(np.log(aligntemp), origin='lower', alpha=0.6)
+plt.scatter(c_x,c_y, c=cscape[c_xycoord])
+plt.colorbar()
+plt.savefig(plotdir+"/NGC4696,IPOL/cdscapes/cscape")
+plt.show()
+
+plt.imshow(polyfitdata_d, origin='lower')
+#plt.imshow(np.log(aligntemp), origin='lower', alpha=0.6)
+plt.scatter(d_x,d_y, c=dscape[d_xycoord])
+plt.show()
 
 '''
 plt.figure(10)
@@ -1259,14 +1427,13 @@ plt.show()
 
 
 
-
-
-
-'''
 # Compute the normalized flux of star 38 for different offsets
 offset_lst, fitparab_lst, fitgauss_lst = [], [], []
 for l, testims in enumerate([testslits,testinterps]):
     
+    # Check whether to compute offsets or not
+    if calc_offs == False:
+        break
     
     # Determine dx- and dy-ranges and parameters
     if l == 0:
@@ -1312,7 +1479,7 @@ for l, testims in enumerate([testslits,testinterps]):
             # Compute nomalized flux for whole image
             interim = align_slits(testims, [[dx,dy]])
             # Save to fits file 
-            # savefits(interim, imsavedir, "append38_tpl8_dx{}dy{}".format(dx,dy)) #TODO REMOVE WHEN SPACE
+            # savefits(interim, imsavedir, "offset_dx{}dy{}".format(dx,dy))
             
             # Determine normalized flux
             F38 = apersum(interim, X38, Y38, R, anRmin, anRmax)
@@ -1380,7 +1547,8 @@ for l, testims in enumerate([testslits,testinterps]):
     
     
     # PLOTS
-    saveim_png(offset_arr, pltsavedir+"/", "offsetopt38_tpl8v2", 
+    saveim_png(offset_arr, pltsavedir+"/", 
+               "offsetopt38_tpl8v2_dx{}dy{}".format(offsetopt_fitgauss[0],offsetopt_fitgauss[1]), 
                colmap='coolwarm', orig='lower',
                datextent=[np.min(dxrange), np.max(dxrange), np.min(dyrange), np.max(dyrange)],
                xtag=r"$\delta_X$", ytag=r"$\delta_Y$")
@@ -1400,7 +1568,7 @@ for l, testims in enumerate([testslits,testinterps]):
     # Save Gaussian finalim to fits file
     savefits(finalim_gauss, imsavedir, "finalim_dx{}dy{}".format(offsetopt_fitgauss[0],
                                                                  offsetopt_fitgauss[1]))
-''' # TODO UNCOMMENT
+
 
 
 
