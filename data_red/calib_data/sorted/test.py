@@ -510,7 +510,7 @@ def saveim_png(data, savedir, fname,
     norm = ImageNormalize(stretch=SqrtStretch())
     plt.imshow(data, cmap=colmap, origin=orig, 
                norm=norm, interpolation=interp, extent=datextent)
-    plt.colorbar(shrink=1.0, aspect=20)
+    plt.colorbar()
     plt.xlabel(xtag, fontsize=20), plt.ylabel(ytag, fontsize=20)
     if not title == None:
         plt.title(title, fontsize=24)
@@ -519,7 +519,7 @@ def saveim_png(data, savedir, fname,
     if not os.path.exists(savedir):
         os.makedirs(savedir)
     plt.savefig(savedir + '/' + fname + ".png")
-    plt.show()
+    # plt.show()
     plt.close()
 
 
@@ -561,7 +561,7 @@ def save3Dim_png(Xgrid, Ygrid, Zdata, savedir, fname, dataplttype='scatter',
     if not title == None:
         plt.title(title, fontsize=24)
     plt.savefig(savedir + '/' + fname + ".png")
-    plt.show()
+    # plt.show()
     plt.close()   
     
     
@@ -781,7 +781,7 @@ def cut_to_slits(slitdata, chipXYranges=[[183,1868],[10,934]]):
     
     # Read out chipdata row for row and cut out slits
     derivs, slits = [], []
-    cutend, upedge_lst, lowedge_lst, gapwidths = 0, [], [], []
+    cutend, upedge_lst, lowedge_lst, gapwidths, shapes = 0, [], [], [], []
     itnos = np.arange(1, rowsno-2, 1)
     
     # Cut slits out of chipdata
@@ -811,6 +811,7 @@ def cut_to_slits(slitdata, chipXYranges=[[183,1868],[10,934]]):
                     upedge_lst.append( cutend + chip_yrange[0] )
                     lowedge_lst.append( cutstart + chip_yrange[0] )
                     gapwidths.append( cutstart - prevcutend ) # [pixels]
+                    shapes.append(np.array(slit.shape))
                         
                     '''
                     # Diagnostic plot
@@ -825,7 +826,7 @@ def cut_to_slits(slitdata, chipXYranges=[[183,1868],[10,934]]):
             except NameError:
                 print("first max")
     
-    return slits, upedge_lst, lowedge_lst, gapwidths
+    return slits, upedge_lst, lowedge_lst, gapwidths, np.array(shapes)
     
 
 
@@ -984,6 +985,124 @@ def interp(data, new_Nx, new_Ny):
     
     return interp
     
+    
+    
+# Function which computes optimal offsets for overlap using the well method
+def offsetopt_well(ims, dxrange, dyrange, center, R, anRmin, anRmax, 
+                   saveims=False, pltsavedir=None, imsavedir=None):
+    
+    
+    # Extract x and y coordinates of center
+    centerx, centery = center
+    # Insert dx=0 and dy=0 for calculation of a0 and b0
+    dxrange, dyrange = np.insert(dxrange,0,0), np.insert(dyrange,0,0)
+    
+    
+    # Initialize array to store the normalized flux differences of the evaluated star corresponding to certain offsets in x and y
+    offset_arr = np.zeros([len(dyrange),len(dxrange)])
+    # Initialize lists
+    offset_lst, fitparab_lst, fitgauss_lst = [], [], []    
+    # Determine normalized flux differences of star
+    for m, dy in enumerate(dyrange):
+        for n, dx in enumerate(dxrange):
+            
+            # Compute nomalized flux for whole image
+            interim = align_slits(testims, [[dx,dy]])
+            # Save to fits file 
+            # savefits(interim, imsavedir, "offset_dx{}dy{}".format(dx,dy))
+            
+            # Determine normalized flux
+            F = apersum(interim, centerx, centery, R, anRmin, anRmax)
+            offset_arr[m,n] = F
+    offset_lst.append(offset_arr[1::,1::])
+    print("\n\n\nEND NORMFLUX CALCULATION {}\n\n\n".format(l+1))
+    
+    
+    # Fit parameter trial input
+    tempZ1 = offset_arr[1::,1::] - np.min(offset_arr)
+    tempZ2, tempZ3 = tempZ1[dyrange==0,:][0,:], tempZ1[:,dxrange==0][:,0]
+    a0 = (np.abs(dxrange[tempZ2!=0]) / np.sqrt(tempZ2[tempZ2!=0])).mean()
+    b0 = (np.abs(dyrange[tempZ3!=0]) / np.sqrt(tempZ3[tempZ3!=0])).mean()
+    y0, x0 = np.unravel_index(offset_arr[1::,1::].argmin(), offset_arr[1::,1::].shape)
+    #x0, y0 = minind[1]+dxrange[1], minind[0]+dyrange[1]
+    print("DEBUG:\t\t", x0, y0, np.min(offset_arr), a0, b0)
+    print("DEBUG:\t\t", dxrange, dyrange)
+    # Paraboloid fit
+    p0 = (x0,y0,np.min(offset_arr[1::,1::]),a0,b0) #(x0, y0, z0, a, b)
+    # Gaussian fit
+    p0_gauss = (x0,y0,np.max(offset_arr[1::,1::]),2,2,
+                abs(np.max(offset_arr[1::,1::]))-abs(np.min(offset_arr[1::,1::])))
+                #(x0, y0, z0, sigx, sigy, A)
+    
+    
+    # Omit dx=0 and dy=0 (these were necessary for calculating p0 only)
+    offset_arr = offset_arr[1::,1::]
+    dxrange, dyrange = dxrange[1::], dyrange[1::]
+    
+    
+    # Conduct parabolic fit to offset_arr
+    fitdata = offset_arr.ravel()
+    dxgrid, dygrid = np.meshgrid(dxrange, dyrange)
+    #popt, pcov = curve_fit(paraboloid, (dxgrid, dygrid), fitdata, p0) #TODO REMOVE
+    popt_gauss, pcov_gauss = curve_fit(gaussian2d, (dxgrid, dygrid), fitdata, p0_gauss)
+    #print("Absolute paraboloid min.:\t\t(dx,dy)={}".format(popt[[0,1]])) #TODO REMOVE
+    print("Absolute 2dGauss min.:\t\t(dx,dy)={}".format(popt_gauss[[0,1]]))
+    
+    '''
+    # Determine the difference between the paraboloid model and the flux data
+    fitparab = paraboloid((dxgrid, dygrid), *popt).reshape(offset_arr.shape)
+    modeval = offset_arr - fitparab
+    ''' # TODO REMOVE
+    # Determine the difference between the 2dGaussian model and the flux data
+    fitgauss2d = gaussian2d((dxgrid, dygrid), *popt_gauss).reshape(offset_arr.shape)
+    modeval_gauss = offset_arr - fitgauss2d
+    # Append result to list
+    #fitparab_lst.append(fitparab)#TODO REMOVE
+    fitgauss_lst.append(fitgauss2d) 
+    
+    
+    '''
+    # Create final slit image using the paraboloid fit
+    offsetopt = ( np.unravel_index(np.argmin(offset_arr), offset_arr.shape) - 
+                  np.array([ len(dxrange[dxrange<0]) , len(dyrange[dyrange<0]) ]) )
+    offsetopt_fit = np.rint(popt[0:2]).astype(int)
+    finalim = align_slits(testims, np.tile(np.round(offsetopt_fit),[len(testims),1]))
+    ''' #TODO REMOVE
+    # Create final slit image using guassian fit
+    offsetopt_fitgauss = np.rint(popt_gauss[0:2]).astype(int)
+    finalim_gauss = align_slits(testims, np.tile((offsetopt_fitgauss),[len(testims),1]))
+    
+    
+    
+    # PLOTS
+    if saveims:
+        saveim_png(offset_arr, pltsavedir+"/", 
+                   "offsetopt38_tpl8v2_dx{}dy{}".format(offsetopt_fitgauss[0],offsetopt_fitgauss[1]), 
+                   colmap='coolwarm', orig='lower',
+                   datextent=[np.min(dxrange), np.max(dxrange), np.min(dyrange), np.max(dyrange)],
+                   xtag=r"$\delta_X$", ytag=r"$\delta_Y$")
+        # Save offset_arr and paraboloid fit as 3D png
+        '''
+        save3Dim_png(dxgrid, dygrid, offset_arr, pltsavedir, "offsetopt38_tpl8_3Dv2", 
+                     fit=True, fitZdata=fitparab, 
+                     xtag=r"$\delta_X$", ytag=r"$\delta_Y$", ztag=r"$\left| (O+E) / (O-E) \right|$")
+        ''' #TODO REMOVE
+        save3Dim_png(dxgrid, dygrid, offset_arr, pltsavedir, "offsetopt38_tpl8_gauss3Dv2", 
+                     fit=True, fitZdata=fitgauss2d, 
+                     xtag=r"$\delta_X$", ytag=r"$\delta_Y$", ztag=r"$\left| (O+E) / (O-E) \right|$")
+        
+        
+        
+        # Save model evaluations to fits file
+        # savefits(modeval, imsavedir, "modevalV2") #TODO REMOVE
+        savefits(modeval_gauss, imsavedir, "modeval_gaussV2")
+        # Save Gaussian finalim to fits file
+        savefits(finalim_gauss, imsavedir, "finalim_dx{}dy{}".format(offsetopt_fitgauss[0],
+                                                                     offsetopt_fitgauss[1]))
+    
+    return(offset_arr, finalim_gauss)
+
+    
 
 
 # Function for fitting a paraboloid to the offset array
@@ -1008,10 +1127,10 @@ def gaussian2d(xy, x0, y0, z0, sigx, sigy, A):
     
 
 
-# Function which computes 
-def compute_cd(O, E, crange, drange, center, R, anRmin, anRmax, 
-               savetofits=False, savedir=None, 
-               alignname=None, gradoptname=None, alignims=None, interpfact=1):
+# Function which computes optimal offsets for overlap using the gradient method
+def offsetopt_cd(O, E, crange, drange, center, R, anRmin, anRmax, 
+                 savetofits=False, savedir=None, 
+                 alignname=None, gradoptname=None, alignims=None, interpfact=1):
     
     # Determination of c and d (gradient method)
     slitdiff = O - E
@@ -1032,11 +1151,12 @@ def compute_cd(O, E, crange, drange, center, R, anRmin, anRmax,
     if savetofits:
         # Save aligned slits with offset (dx,dy)=(c,d)
         aligned = align_slits(alignims, [np.rint(interpfact*Qmin_cd).astype(int)])
-        savefits(aligned, savedir, alignname+"dx{}dy{}".format(int(np.rint(Qmin_cd[0])),
-                                                               int(np.rint(Qmin_cd[1]))))
+        savefits(aligned, savedir, alignname+"dx{}dy{}".format(int(np.rint(interpfact*Qmin_cd[0])),
+                                                               int(np.rint(interpfact*Qmin_cd[1]))))
         # Save norm gradopt_norm
-        savefits(gradopt_norm, savedir, gradoptname+"dx{}dy{}".format(int(np.rint(Qmin_cd[0])),
-                                                                      int(np.rint(Qmin_cd[1]))))
+        savefits(gradopt_norm, savedir, 
+                 gradoptname+"dx{}dy{}".format(int(np.rint(interpfact*Qmin_cd[0])),
+                                               int(np.rint(interpfact*Qmin_cd[1]))))
     
     return(Qmin, Qmin_cd)
     
@@ -1196,9 +1316,8 @@ chip_xyranges = [[183,1868],[10,934]]
 
 
 # Cut and append slits
-slits, upedges, lowedges, gapw = cut_to_slits(data)
+slits, upedges, lowedges, gapw, slitshapes = cut_to_slits(data)
 # Make slits same shape
-slitshapes = np.array([np.array(slits[i].shape) for i in range(0,10,1)])
 slits = [slits[i][0:np.min(slitshapes[:,0]),
                   0:np.min(slitshapes[:,1])] for i in range(0,10,1)]
 
@@ -1213,7 +1332,7 @@ testslitshapes = np.array([testslits[0].shape, testslits[1].shape]) #TODO TODO G
 minelmarg = np.argmin(np.prod(testslitshapes, axis=1))
 minNy, minNx = testslitshapes[minelmarg]
 
-'''
+
 # Determine datapoints on the slit which has the smallest shape
 xpoints = np.arange(0, testslits[minelmarg].shape[1])
 ypoints = np.arange(0, testslits[minelmarg].shape[0])
@@ -1231,7 +1350,7 @@ interpgrid_x, interpgrid_y = np.meshgrid(interpx, interpy)
 interpO = interpolate.griddata(slitpoints, Ovalues, (interpgrid_x,interpgrid_y), method='cubic')
 interpE = interpolate.griddata(slitpoints, Evalues, (interpgrid_x,interpgrid_y), method='cubic')
 testinterps = [interpO, interpE] #TODO TODO TODO TODO CHANGE?
-''' #TODO USE custom interp function
+#TODO USE custom interp function
 
 
 
@@ -1308,7 +1427,7 @@ for starno, starpar in enumerate(star_lsts[0]):
     print("appendedOcent:\t\t", appendedOcent)
     
     
-
+    
     # Cut out square regions on both slits centered around the current star
     minx, maxx, miny, maxy = (max(slitOcent[0]-35,0), min(slitOcent[0]+35,Nx),
                               max(slitOcent[1]-35,0), min(slitOcent[1]+35,Ny))
@@ -1317,23 +1436,23 @@ for starno, starpar in enumerate(star_lsts[0]):
     # Determine interpolations
     interpO = interp(cutoutO, 10*cutoutO.shape[1], 10*cutoutO.shape[0])
     interpE = interp(cutoutE, 10*cutoutE.shape[1], 10*cutoutE.shape[0])
-
+    
     
     # Recall previous c and d values for current star
     cval_prev = cscape_prev[appendedOcent[1], appendedOcent[0]]
     dval_prev = dscape_prev[appendedOcent[1], appendedOcent[0]]
     # Determine c and d values to use for evaluation
-    crange = np.linspace(cval_prev-0.5, cval_prev+0.5, 21) #TODO adjust to cval_prev
+    crange = np.linspace(-2, 2, 51) #TODO adjust to cval_prev
     drange = np.linspace(dval_prev-0.5, dval_prev+0.5, 21) #TODO adjust to dval_prev 
     
     
     # Compute the c and d parameters which optimize overlap using gradient method
-    Qopt, opt_cd = compute_cd(cutoutO, cutoutE, crange, drange,
-                              newcent, starpar[3], starpar[3], 2*starpar[3],
-                              savetofits=True, savedir=imdir+"/offsetopt/cdscapes", #TODO savetofits
-                              alignname="cdAlign_star{}".format(starno+1),
-                              gradoptname="gradopt_star{}".format(starno+1), 
-                              alignims=[interpO,interpE], interpfact=10)
+    Qopt, opt_cd = offsetopt_cd(cutoutO, cutoutE, crange, drange,
+                                newcent, starpar[3], starpar[3], 2*starpar[3],
+                                savetofits=True, savedir=imdir+"/offsetopt/cdscapes", 
+                                alignname="cdAlign_star{}".format(starno+1),
+                                gradoptname="gradopt_star{}".format(starno+1), 
+                                alignims=[interpE,interpO], interpfact=10)
     Qopts.append(Qopt), opts_cd.append(opt_cd)
     print("Qopt, opt_cd:\t\t", Qopt, opt_cd)
     
@@ -1356,16 +1475,14 @@ for starno, starpar in enumerate(star_lsts[0]):
             savefits(temp2, imdir+"/offsetopt/cdscapes", 
                             "tempgradopt_star{}c{}d{}".format(starno+1,int(np.rint(newc)),
                                                                    int(np.rint(newd))))
-            
+    
     
     # Update c- and dscape
     cscape[appendedOcent[1], appendedOcent[0]] = opt_cd[0]
     dscape[appendedOcent[1], appendedOcent[0]] = opt_cd[1]
-
-
-
-# Check whether to run cdscape polynomial fit
-if calc_cd:   
+    
+    
+    
     # Determine x and y coordinates of evaluated points
     c_xycoord, d_xycoord = cscape.nonzero(), dscape.nonzero()
     cpoints, dpoints = np.dstack(c_xycoord)[0], np.dstack(d_xycoord)[0]
@@ -1379,51 +1496,27 @@ if calc_cd:
     # Evalutate fitted polynomial at gridpoints
     polyfitdata_c = polyval2d(scape_xgrid, scape_ygrid, polynom_c)
     polyfitdata_d = polyval2d(scape_xgrid, scape_ygrid, polynom_d)
-
-
-
-
-
-
-
-'''
-# Cubic spline interpolations
-scapex, scapey = np.arange(0,cscape.shape[1],1), np.arange(0,cscape.shape[0],1)
-scape_xgrid, scape_ygrid = np.meshgrid(scapex, scapey)
-c_interpscape = interpolate.griddata(cpoints, cscape[c_xycoord], 
-                                  (scape_xgrid, scape_ygrid), method='cubic')
-d_interpscape = interpolate.griddata(dpoints, dscape[d_xycoord], 
-                                  (scape_xgrid, scape_ygrid), method='cubic')    
-'''
-
-savefits(cscape, imdir+"/offsetopt/cdscapes", "cscape_tpl8")
-savefits(dscape, imdir+"/offsetopt/cdscapes", "dscape_tpl8")
-savefits(polyfitdata_c, imdir+"/offsetopt/cdscapes", "cscapefitted_tpl8")
-savefits(polyfitdata_d, imdir+"/offsetopt/cdscapes", "dscapefitted_tpl8")
-
-plt.imshow(polyfitdata_c, origin='lower')
-#plt.imshow(np.log(aligntemp), origin='lower', alpha=0.6)
-plt.scatter(c_x,c_y, c=cscape[c_xycoord])
-plt.colorbar()
-plt.savefig(plotdir+"/NGC4696,IPOL/cdscapes/cscape")
-plt.show()
-
-plt.imshow(polyfitdata_d, origin='lower')
-#plt.imshow(np.log(aligntemp), origin='lower', alpha=0.6)
-plt.scatter(d_x,d_y, c=dscape[d_xycoord])
-plt.show()
-
-'''
-plt.figure(10)
-plt.imshow(aligntemp, cmap='afmhot', origin='lower')
-plt.colorbar()
-plt.show()
-
-plt.figure(11)
-plt.imshow(cscape, cmap='RdBu', origin='lower')
-plt.colorbar()
-plt.show()
-'''   
+    
+    
+    
+    # Save results
+    savefits(cscape, imdir+"/offsetopt/cdscapes", "cscape_tpl8")
+    savefits(dscape, imdir+"/offsetopt/cdscapes", "dscape_tpl8")
+    savefits(polyfitdata_c, imdir+"/offsetopt/cdscapes", "cscapefitted_tpl8")
+    savefits(polyfitdata_d, imdir+"/offsetopt/cdscapes", "dscapefitted_tpl8")
+    
+    plt.imshow(polyfitdata_c, origin='lower')
+    #plt.imshow(np.log(aligntemp), origin='lower', alpha=0.6)
+    plt.scatter(c_x,c_y, c=cscape[c_xycoord])
+    plt.colorbar()
+    plt.savefig(plotdir+"/NGC4696,IPOL/cdscapes/cscape")
+    # plt.show()
+    
+    plt.imshow(polyfitdata_d, origin='lower')
+    #plt.imshow(np.log(aligntemp), origin='lower', alpha=0.6)
+    plt.scatter(d_x,d_y, c=dscape[d_xycoord])
+    # plt.show()
+    
 
 
 
@@ -1434,22 +1527,18 @@ for l, testims in enumerate([testslits,testinterps]):
     # Check whether to compute offsets or not
     if calc_offs == False:
         break
-    
+
     # Determine dx- and dy-ranges and parameters
     if l == 0:
-        continue
         # Define save directories
         pltsavedir = plotdir + "/NGC4696,IPOL/offsetopt/noninterp"
         imsavedir = imdir + "/offsetopt/noninterp"   
         # Set offset ranges 
-        [dxrange, dyrange] = [np.arange(-4,5), np.arange(-2,7)] 
+        [dxrange, dyrange] = [np.arange(-4,5), np.arange(-6,3)] 
         # Determine centers in testims and interim
         [X38, Y38] = find_center([807,24], testims[0], 15)
         # Set aperture sum parameters
-        [R, anRmin, anRmax] = [11, 12, 16]    
-        
-        # c and d ranges for Frans' method
-        crange, drange = np.linspace(0, 0.5, 100), np.linspace(1,2,100)
+        [R, anRmin, anRmax] = [11, 12, 16]  
             
     if l == 1:
         # Define save directories
@@ -1461,12 +1550,13 @@ for l, testims in enumerate([testslits,testinterps]):
         [X38, Y38] = find_center([8053,269], testims[0], 75)
         # Set aperture sum parameters
         [R, anRmin, anRmax] = np.array([85, 90, 111]) 
-        
-        # c and d ranges for Frans' method
-        crange, drange = np.linspace(-2, 2, 100), np.linspace(-2,2,100)   
     
     
+    well, alignedim_well = offsetopt_well(testims, dxrange, dyrange, [X38,Y38], R, anRmin, anRmax,
+                                          saveims=True, pltsavedir=pltsavedir, imsavedir=imsavedir)
     
+
+    '''
     # Insert dx=0 and dy=0 for calculation of a0 and b0
     dxrange, dyrange = np.insert(dxrange,0,0), np.insert(dyrange,0,0)
     # Initialize array to store the normalized flux differences of star 38 corresponding to certain offsets in x and y
@@ -1497,7 +1587,8 @@ for l, testims in enumerate([testslits,testinterps]):
         b0 = (np.abs(dyrange[tempZ3!=0]) / np.sqrt(tempZ3[tempZ3!=0])).mean()
         p0 = (0,2,np.min(offset_arr),a0,b0) #(x0, y0, z0, a, b)
         # Gaussian fit
-        p0_gauss = (0,2,np.max(offst_arr),2,2,np.min(offset_arr)-np.max(offset_arr)) #(x0, y0, z0, sigx, sigy, Px, Py, A)
+        p0_gauss = (0,-2,np.max(offset_arr),2,2,abs(np.max(offset_arr))-abs(np.min(offset_arr)))
+                    #(x0, y0, z0, sigx, sigy, A)
         
     if l == 1:
         # Paraboloid fit
@@ -1507,7 +1598,8 @@ for l, testims in enumerate([testslits,testinterps]):
         b0 = (np.abs(dyrange[tempZ3!=0]) / np.sqrt(tempZ3[tempZ3!=0])).mean()
         p0 = (2,17,np.min(offset_arr),a0,b0) #(x0, y0, z0, a, b)
         # Gaussian fit
-        p0_gauss = (3,19,np.max(offset_arr),2,2,np.min(offset_arr)-np.max(offset_arr)) #(x0, y0, z0, sigx, sigy, Px, Py, A)
+        p0_gauss = (2,18,np.max(offset_arr),2,2,abs(np.max(offset_arr))-abs(np.min(offset_arr))) 
+                    #(x0, y0, z0, sigx, sigy, A)
     
     
     # Omit dx=0 and dy=0 (these were necessary for calculating p0 only)
@@ -1568,52 +1660,9 @@ for l, testims in enumerate([testslits,testinterps]):
     # Save Gaussian finalim to fits file
     savefits(finalim_gauss, imsavedir, "finalim_dx{}dy{}".format(offsetopt_fitgauss[0],
                                                                  offsetopt_fitgauss[1]))
+    '''
 
 
-
-
-
-
-
-
-'''
-testdiff = testslitO - testslitE
-grady, gradx = np.gradient(testslitO)
-grady2, gradx2 = np.gradient(testslitO + testslitE)
-
-plt.figure(0)
-plt.imshow(testdiff, cmap='afmhot', origin='lower')
-plt.colorbar()
-
-plt.figure(1)
-plt.imshow(gradx, cmap='afmhot', origin='lower')
-plt.colorbar()
-
-plt.figure(2)
-plt.imshow(grady, cmap='afmhot', origin='lower')
-plt.colorbar()
-plt.show()
-
-testQ = (testdiff + Qmin_cd[0]*gradx + Qmin_cd[1]*grady)**2
-testQ2 = testQ / (testslitO + testslitE)**2
-plt.figure(3)
-plt.imshow(testQ, cmap='afmhot', origin='lower')
-plt.colorbar()
-plt.show()
-''' # q_ij (fig0), gradx (fig1) en grady (fig2)     DIAGNOSTIC
-
-
-
-
-
-'''
-finalim_test = align_slits([interpO, interpE], np.tile(offsetopt_fitgauss,[len(testims),1]))
-
-plt.figure(10)
-plt.imshow(np.log(finalim_gauss), cmap='afmhot', origin='lower')
-plt.colorbar()
-plt.show()
-''' # DIAGNOSTIC
 
 
 
