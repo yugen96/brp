@@ -1192,34 +1192,45 @@ def gaussian2d(xy, x0, y0, z0, sigx, sigy, A):
 
 
 # Function which computes optimal offsets for overlap using the gradient method
-def offsetopt_cd(O, E, crange, drange, center, R, anRmin, anRmax, 
-                 savetofits=False, savedir=None, alignname=None, gradoptname=None,
-                 alignims=None, interpfact=1, noninterpoffs=np.array([0,0])):
+def offsetopt_cd(O, E, crange, drange, center, R, anRmin, anRmax, savetofits=False,
+                 savedir=None, gradoptname=None, alignims=None):
     
     # Determination of c and d (gradient method)
     slitdiff, slitsum = O-E, O+E    
     grady, gradx = np.gradient(O)
     
+    # Diagnostic plot
+    f, (ax1, ax2) = plt.subplots(1, 2, sharey=True)
+    dat1 = ax1.imshow(slitdiff, origin='lower', cmap="afmhot")
+    plt.colorbar(dat1)
+    dat2 = ax2.imshow(grady, origin='lower', cmap="afmhot")
+    plt.colorbar(dat2)
+    plt.show()
+    plt.close()
+    
     Qmin_cd, Qmin = np.array([0,0]), np.inf
     for c in crange:
         for d in drange:
             
-            temp = (slitdiff + c*gradx + d*grady)**2
+            temp = (slitdiff - c*gradx - d*grady)**2
             Q = apersum(temp, center[0], center[1], R, anRmin, anRmax)
             
             if Q <= Qmin:
                 Qmin, Qmin_cd = Q, np.array([c,d])
-                gradopt_norm = temp / (O+E)**2
+                gradopt = np.sqrt(temp)
     
     if savetofits:
-        # Save aligned slits with offset (dx,dy)=(c,d)
-        offs = (np.rint(interpfact*noninterpoffs).astype(int) + 
-                                                    np.rint(interpfact*Qmin_cd).astype(int))
-        aligned = align_slits(alignims, [offs], detoffs=False)
-        savefits(aligned, savedir, alignname+"dx{}dy{}".format(offs[0],offs[1]))
-        # Save norm gradopt_norm
-        savefits(gradopt_norm, savedir, 
-                 gradoptname+"dx{}dy{}".format(int(offs[0]),int(offs[1])))
+        # Diagnostic image
+        f, (ax1, ax2) = plt.subplots(1, 2, sharey=True)
+        dat1 = ax1.imshow(slitdiff, origin='lower', cmap="afmhot")
+        plt.colorbar(dat1)
+        dat2 = ax2.imshow(gradopt, origin='lower', cmap="afmhot")
+        plt.colorbar(dat2)
+        plt.show()
+        plt.close()
+        # Save the gradient corrected slit
+        savefits(gradopt, savedir, gradoptname+"c{}d{}".format(np.round(Qmin_cd[0],2), 
+                                                               np.round(Qmin_cd[1],2)))
     
     return(Qmin, Qmin_cd)
     
@@ -1461,39 +1472,6 @@ for starno, starpar in enumerate(star_lsts[0]):
     # IS OK #TODO POSSIBLY REMOVE
     
     
-    '''
-    # Compute wells for original slits
-    offsetopt, well, alignedim_well = offsetopt_well(cutouts, dxrange, dyrange, 
-                                                     cutoutOcent, R, anRmin, anRmax,
-                                                     saveims=True, 
-                                                     pltsavedir=plotdir+"/offsetopt/noninterp3",
-                                                     imsavedir=imdir+"/offsetopt/noninterp3",
-                                                     starno=starno)    
-    
-    # Set interpolated offset parameters
-    dxrange_interp = np.arange(offsetopt[0]-10, offsetopt[0]+12, 2)
-    dyrange_interp = np.arange(offsetopt[1]-10, offsetopt[1]+12, 2)
-    # Compute wells for interpolated slits
-    [INTERPoffsetopt, 
-    INTERPwell, 
-    INTERPalignedim_well] = offsetopt_well(interp_cutouts,
-                                           dxrange_interp, dyrange_interp, 
-                                           interp_cutoutOcent,
-                                           interpf*R, interpf*anRmin, interpf*anRmax,
-                                           saveims=True, pltsavedir=(plotdir+"/offsetopt/interp3"),
-                                           imsavedir=(imdir+"/offsetopt/interp3"),
-                                           starno=starno)
-                                           
-    # Compute wells for original slits
-    offsetopt, well, alignedim_well = offsetopt_well(cutouts, dxrange, dyrange, 
-                                                     cutoutOcent, R, anRmin, anRmax,
-                                                     saveims=True, 
-                                                     pltsavedir=plotdir+"/offsetopt/noninterp3",
-                                                     imsavedir=imdir+"/offsetopt/noninterp3",
-                                                     starno=starno)    
-    ''' #TODO POSSIBLY REMOVE
-    if not (starno+1 == 18) or (starno+1 == 23):
-        continue
     
     # Compute wells for original slits
     offsetopt, well, alignedim_well = offsetopt_well([slitE,slitO], dxrange, dyrange, 
@@ -1546,7 +1524,7 @@ if calc_well:
 
 
 
-# Create temporary aligned image
+# Create template aligned image
 slitshapes = np.array([np.array(slits[i].shape) for i in range(0,10,1)])
 aligntemp = np.concatenate([slits[i+1] for i in range(0,10,2)], axis = 0)
 # Recall previous c- and dscapes
@@ -1580,7 +1558,7 @@ for f in alignedfiles:
     
 
 # Apply gradient method on all stars and create cdscapes
-Qopts, opts_cd, interpslits, interpf = [], [], [], 5
+Qopts, opts_cd = [], []
 n, cscape, dscape = 8, np.zeros(aligntemp.shape), np.zeros(aligntemp.shape)
 for starno, starpar in enumerate(star_lsts[0]):
     
@@ -1594,81 +1572,73 @@ for starno, starpar in enumerate(star_lsts[0]):
     if (starno+1) in slit_divide:
         # Extract ordinary and extraordinary slit
         slitE, slitO = slits[n], slits[n+1]
-        '''
-        alignedim = aligneddatadict["finalim"+str(starno+1)]
-        '''
-        framesize = 2*np.array(slitO.shape)
-        lowlcorn = (0.25*framesize).astype(int)
-        embededE = embed(slitE, framesize, offset=offsets[starno+1], cornerpix=lowlcorn)
-        embededO = embed(slitO, framesize, offset=[0,0], cornerpix=lowlcorn)
         # Adjust shape so that O and E have equal size
         '''
         Nx, Ny = min(slitE.shape[1], slitO.shape[1]), min(slitE.shape[0], slitO.shape[0])
         slitE, slitO = slitE[0:Ny,0:Nx], slitO[0:Ny,0:Nx]
         '''
-        # Determine slit interpolations
-        interpE = interp(slitE, interpf*slitE.shape[1], interpf*slitE.shape[0])
-        interpO = interp(slitO, interpf*slitO.shape[1], interpf*slitO.shape[0])
-        interpslits.append(interpE), interpslits.append(interpO)
         # Determine the upper and lower edges of the slits
         upedgeE, upedgeO = upedges[n], upedges[n+1]
         lowedgeE, lowedgeO = lowedges[n], lowedges[n+1]
         print("Slit pair {}".format(n/2))
         n -= 2
         
-            
-    # Compute stellar location on O slit
+    
+    # Compute stellar location on O slit and on the template appended slit
     slitOcent = find_center([starpar[0]-chip_xyranges[0][0], starpar[1]-lowedgeO],
                              slitO, 15)
-    embedOcent = lowlcorn[[1,0]] + slitOcent
-    interpOcent = find_center(interpf*slitOcent, interpO, interpf*15)
     appendedOcent = find_center([slitOcent[0], 
                                  slitOcent[1]+np.sum(slitwidths[[m+1 for m in np.arange(0,n+2,2)]])],
                                  aligntemp, 25) #TODO SAVE TO NP FILE
     print("appendedOcent:\t\t", appendedOcent)
     
     
-    # Diagnostic plot
-    '''
-    plt.figure()
-    plt.imshow(slitO, origin='lower', cmap='rainbow')
-    plt.scatter(slitOcent[0], slitOcent[1], s=30, c='k')
-    plt.show()
-    plt.close()
+    # Create cutout
+    cutxmin, cutxmax = max(0, slitOcent[0]-35), min(slitO.shape[1]-1, slitOcent[0]+35)
+    cutymin, cutymax = max(0, slitOcent[1]-35), min(slitO.shape[0]-1, slitOcent[1]+35)
+    cutoutO = slitO[cutymin:cutymax, cutxmin:cutxmax]
+    cutoutE = slitE[cutymin:cutymax, cutxmin:cutxmax]
+    cutoutOcent = (slitOcent - np.rint([cutxmin,cutymin])).astype(int)
+    # Apply whole pixel-accuracy offset
+    framesize = 2*np.array(cutoutO.shape)
+    lowlcorn = (0.25*framesize).astype(int)
+    embedE = embed(cutoutE, framesize, offset=offsets[starno+1], cornerpix=lowlcorn)
+    embedO = embed(cutoutO, framesize, offset=[0,0], cornerpix=lowlcorn)
+    embedOcent = np.rint(0.25*framesize[[1,0]]).astype(int) + cutoutOcent
     
+    
+    # Diagnostic plot    
     plt.figure()
-    plt.imshow(embededO, origin='lower', cmap='rainbow')
-    plt.scatter(lowlcorn[1],lowlcorn[0], s=30, c='k')
+    plt.imshow(embedO, origin='lower', cmap='rainbow')
     plt.scatter(embedOcent[0], embedOcent[1], s=30, c='k')
     plt.show()
     plt.close()
     
     plt.figure()
-    plt.imshow(embededE, origin='lower', cmap='rainbow')
-    plt.scatter(lowlcorn[1],lowlcorn[0], s=30, c='k')
+    plt.imshow(embedE, origin='lower', cmap='rainbow')
     plt.scatter(embedOcent[0], embedOcent[1], s=30, c='k')
     plt.show()
     plt.close()
-    '''
-    #TODO The allocation of the stellar center on the aligned image seems to be OK
+    
+    # Save O-E
+    savefits(embedO-embedE, imdir+"/offsetopt/cdscapes8", "slitdiff_star{}".format(starno+1))    
+    #TODO The allocation of the stellar center on the aligned image is OK
     
     
     # Recall previous c and d values for current star
     cval_prev = cscape_prev[appendedOcent[1], appendedOcent[0]]
     dval_prev = dscape_prev[appendedOcent[1], appendedOcent[0]]
     # Determine c and d values to use for evaluation
-    crange = np.arange(-1.5, 1.6, 0.1) #TODO adjust to cval_prev
-    drange = np.arange(-1.5, 1.6, 0.1) #TODO adjust to dval_prev 
+    crange = np.arange(-1.2, 1.25, 0.05) #TODO adjust to cval_prev
+    drange = np.arange(-1.2, 1.25, 0.05) #TODO adjust to dval_prev 
     
     
     # Compute the c and d parameters which optimize overlap using gradient method
-    Qopt, opt_cd = offsetopt_cd(embededO, embededE, crange, drange,
+    Qopt, opt_cd = offsetopt_cd(embedO, embedE, crange, drange,
                                 embedOcent, starpar[3], starpar[3], 2*starpar[3],
-                                savetofits=True, savedir=imdir+"/offsetopt/cdscapes7", 
-                                alignname="cdAlign_star{}".format(starno+1),
+                                savetofits=True, savedir=imdir+"/offsetopt/cdscapes8", 
                                 gradoptname="gradopt_star{}".format(starno+1), 
-                                alignims=[interpE,interpO], interpfact=interpf, 
-                                noninterpoffs=offsets[starno])
+                                alignims=[cutoutE,cutoutO])
     Qopts.append(Qopt), opts_cd.append(opt_cd)
     print("Qopt, opt_cd:\t\t", Qopt, opt_cd)
     
@@ -1710,7 +1680,7 @@ if calc_cd:
     cpoints, dpoints = np.dstack(c_xycoord)[0], np.dstack(d_xycoord)[0]
     c_x, c_y, d_x, d_y = cpoints[:,1], cpoints[:,0], dpoints[:,1], dpoints[:,0]
     # Third order bivariate polynomial fit
-    polynom_c = polyfit2d(c_x, c_y, cscape[c_xycoord], order=4)
+    polynom_c = polyfit2d(c_x, c_y, cscape[c_xycoord], order=4) #TODO REWRITE USING MESHGRIDS
     polynom_d = polyfit2d(d_x, d_y, dscape[d_xycoord], order=4)
     # Compute gridpoints for evaluation
     scapex, scapey = np.arange(0,cscape.shape[1],1), np.arange(0,cscape.shape[0],1)
@@ -1721,23 +1691,26 @@ if calc_cd:
     
     
     # Save results
-    savefits(cscape, imdir+"/offsetopt/cdscapes7", "cscape_tpl8")
-    savefits(dscape, imdir+"/offsetopt/cdscapes7", "dscape_tpl8")
-    savefits(polyfitdata_c, imdir+"/offsetopt/cdscapes7", "cscapefitted_tpl8")
-    savefits(polyfitdata_d, imdir+"/offsetopt/cdscapes7", "dscapefitted_tpl8")
+    savefits(cscape, imdir+"/offsetopt/cdscapes8", "cscape_tpl8")
+    savefits(dscape, imdir+"/offsetopt/cdscapes8", "dscape_tpl8")
+    savefits(polyfitdata_c, imdir+"/offsetopt/cdscapes8", "cscapefitted_tpl8")
+    savefits(polyfitdata_d, imdir+"/offsetopt/cdscapes8", "dscapefitted_tpl8")
     
     plt.imshow(polyfitdata_c, origin='lower')
     #plt.imshow(np.log(aligntemp), origin='lower', alpha=0.6)
     plt.scatter(c_x,c_y, c=cscape[c_xycoord])
     plt.colorbar()
-    plt.savefig(plotdir+"/cdscapes7/cscape")
+    plt.savefig(plotdir+"/cdscapes8/cscape")
     plt.show()
     
     plt.imshow(polyfitdata_d, origin='lower')
     #plt.imshow(np.log(aligntemp), origin='lower', alpha=0.6)
     plt.scatter(d_x,d_y, c=dscape[d_xycoord])
-    plt.savefig(plotdir+"/cdscapes7/dscape")
+    plt.savefig(plotdir+"/cdscapes/dscape")
     plt.show()
+    
+
+
 
 
 
