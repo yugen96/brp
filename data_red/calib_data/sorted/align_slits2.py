@@ -1299,8 +1299,10 @@ def offsetopt_cd(O, E, crange, drange, center, R, savetofits=False,
             Qlst, Qlst_err = apersum_old(temp, center[0], center[1], R)
             Q = Qlst[0]
             
+            '''
             savefits(slitdiff-c*gradx-d*grady, savedir+"/NONABS", 
                      "testc{}d{}".format(np.round([c,d],3)[0], np.round([c,d],3)))
+            '''
             
             if Q <= Qmin:
                 Qmin, Qmin_cd = Q, np.array([c,d])
@@ -1405,6 +1407,7 @@ def align_slits_wrong(slits, pixoffs):
 
 # Specify data and filename
 datadir = "/home/bjung/Documents/Leiden_University/brp/data_red/calib_data"
+stddatadir = datadir + "/sorted/STD,IPOL"
 scidatadir = datadir + "/sorted/NGC4696,IPOL"
 sci_dirs = [scidatadir + "/CHIP1"]
 testdata = sci_dirs[0] + "/tpl8/corrected2/FORS2.2011-05-04T01:31:46.334_COR.fits" # j=7, k=1
@@ -1421,15 +1424,21 @@ header, Mflat_norm = extract_data(datadir + "/masterflats/masterflat_norm_FLAT,L
 
 
 # Aproximate coordinates of selection of stars within CHIP1 of 'Vela1_95' and 'WD1615_154'. Axis 0 specifiec the different sci_dirs; axis 1 specifies the different stars within the sci_dirs; axis 2 specifies the x, y1, y2 coordinate of the specific star (with y1 specifying the y coordinate on the upper slit and y2 indicating the y coordinate on the lower slit) and the aproximate stellar radius. NOTE: THE LAST LIST WITHIN AXIS1 IS A SKY APERTURE!!!
-star_lsts = [[[335, 904, 807, 5], [514, 869, 773, 7], [1169, 907, 811, 5], [1383, 878, 782, 7], 
+star_lsts_sci = [[335, 904, 807, 5], [514, 869, 773, 7], [1169, 907, 811, 5], [1383, 878, 782, 7], 
               [341, 694, 599, 10], [370, 702, 607, 11], [362, 724, 630, 5], [898, 709, 609, 8], 
               [1836, 707, 611, 6], [227, 523, 429, 6], [354, 498, 404, 10], [376, 512, 418, 8], 
               [419, 525, 431, 7], [537, 491, 392, 7], [571, 541, 446, 8], [1096, 510, 416, 5], 
               [1179, 530, 436, 8], [487, 320, 226, 7], [637, 331, 238, 6], [1214, 345, 252, 6], 
               [1248, 326, 233, 6], [1663, 308, 217, 9], [326, 132, 40, 5], [613, 186, 94, 10], 
               [634, 184, 91, 9], [642, 134, 41, 7], [838, 175, 82, 8], [990, 140, 48, 11], 
-              [1033, 157, 65, 9], [1172, 147, 55, 7], [1315, 164, 71, 8], [1549, 164, 72, 13]]] 
-star_lsts = np.array(star_lsts) # 32 stars in total (42-10)
+              [1033, 157, 65, 9], [1172, 147, 55, 7], [1315, 164, 71, 8], [1549, 164, 72, 13]]
+# Aproximate coordinates of selection of stars within CHIP1 of 'Vela1_95' and 'WD1615_154'. Axis 0 specifiec the different std_dirs; axis 1 specifies the different stars within the std_dir; axis 2 specifies the x, y1, y2 coordinate of the specific star (with y1 specifying the y coordinate on the upper slit and y2 indicating the y coordinate on the lower slit) and the aproximate stellar radius. NOTE: THE LAST LIST WITHIN AXIS1 IS A SKY APERTURE!!!
+star_lsts_std = [[[1034, 347, 251, 15], [1177, 368, 273, 8], [319, 345, 250, 5], [281, 499, 403, 6], [414, 139, 45, 12], [531, 706, 609, 5], [1583, 322, 229, 3], [1779, 321, 224, 4], [1294, 725, 627, 4], [1501, 719, 622, 7]],
+
+            [[1039, 347, 253, 12], [248, 195, 103, 8], [240, 380, 286, 8], [599, 541, 446, 5], [365, 700, 604, 5], [702, 903, 806, 6], [801, 136, 43, 4], [1055, 133, 43, 4], [1186, 130, 37, 4], [1132, 685, 592, 3], [1222, 685, 592, 4], [1395, 679, 587, 4], [1413, 912, 816, 5], [1655, 542, 449, 5], [1643, 512, 417, 5], [1632, 190, 97, 6], [1608, 178, 85, 4]]] #[pixel]              
+star_lsts_sci = np.array(star_lsts_sci) # 32 stars in total (42-10)
+star_lsts_std = [np.array(star_lsts_std[0]), np.array(star_lsts_std[1])]
+star_lsts = star_lsts_std.insert(0, star_lsts_sci[0])
 
 # List specifying the (axis1) indices of the first stars on each slit
 slit_divide = np.array([1, 5, 10, 18, 23])
@@ -1613,12 +1622,8 @@ if calc_well:
 
 
 
-
-# Create template aligned image
-slitshapes = np.array([np.array(slits[i].shape) for i in range(0,10,1)])
-aligntemp = np.concatenate([slits[i+1] for i in range(0,10,2)], axis = 0)
 # Recall previous c- and dscapes
-header, cscape_prev = extract_data(imdir+"/offsetopt/old/cdscapes/cscape_tpl8.fits")
+header, cscape_prev = extract_data(imdir+"/offsetopt/old/cdscapes/cscape_tpl8.fits") #TODO REMOVE
 header, dscape_prev = extract_data(imdir+"/offsetopt/old/cdscapes/dscape_tpl8.fits")
 
 
@@ -1648,8 +1653,10 @@ for f in alignedfiles:
     
 
 # Apply gradient method on all stars and create cdscapes
-Qopts, opts_cd = [], []
-n, cscape, dscape = 8, np.zeros(aligntemp.shape), np.zeros(aligntemp.shape)
+Qopts, opts_cd, n = [], [], 8
+cscape = np.tile(np.nan, np.array(data.shape))
+dscape = np.tile(np.nan, np.array(data.shape))
+for 
 for starno, starpar in enumerate(star_lsts[0]):
     
     # Check whether to compute cdscapes
@@ -1677,10 +1684,22 @@ for starno, starpar in enumerate(star_lsts[0]):
     # Compute stellar location on O slit and on the template appended slit
     slitOcent = find_center([starpar[0]-chip_xyranges[0][0], starpar[1]-lowedgeO],
                              slitO, 15)
+    dataOcent = find_center([starpar[0], starpar[1]],
+                             data, 15)
+    
+    '''
     appendedOcent = find_center([slitOcent[0], 
-                                 slitOcent[1]+np.sum(slitwidths[[m+1 for m in np.arange(0,n+2,2)]])],
+                                 slitOcent[1]+np.sum(slitwidths[[m for m in np.arange(0,n)]])],
                                  aligntemp, 25) #TODO SAVE TO NP FILE
     print("appendedOcent:\t\t", appendedOcent)
+    
+    plt.figure()
+    plt.imshow(data, origin='lower', cmap='rainbow')
+    plt.colorbar()
+    plt.scatter(appendedOcent[0], appendedOce[1], s=30, c='k')
+    plt.show()
+    plt.close()
+    '''
     
     
     # Create cutout
@@ -1726,80 +1745,183 @@ for starno, starpar in enumerate(star_lsts[0]):
     
     
     # Save O-E
-    savefits(embedOcorr-embedEcorr, imdir+"/offsetopt/cdscapes13", 
+    savefits(embedOcorr-embedEcorr, imdir+"/offsetopt/cdscapes15/star{}".format(starno+1), 
              "slitdiff_star{}".format(starno+1)) 
-    savefits(cutoutO, imdir+"/offsetopt/cdscapes13", "O_star{}".format(starno+1))       
-    savefits(cutoutE, imdir+"/offsetopt/cdscapes13", "E_star{}".format(starno+1)) 
+    savefits(cutoutO, imdir+"/offsetopt/cdscapes15/star{}".format(starno+1), 
+             "O_star{}".format(starno+1))       
+    savefits(cutoutE, imdir+"/offsetopt/cdscapes15/star{}".format(starno+1), 
+             "E_star{}".format(starno+1)) 
     #TODO The allocation of the stellar center on the aligned image is OK
     
     
     # Recall previous c and d values for current star
-    cval_prev = cscape_prev[appendedOcent[1], appendedOcent[0]]
+    cval_prev, dval_prev = 0, 0
+    '''
     dval_prev = dscape_prev[appendedOcent[1], appendedOcent[0]]
-    # Determine c and d values to use for evaluation
-    crange = np.arange(-1.2, 1.25, 0.05) #TODO adjust to cval_prev 
-    drange = np.arange(-1.2, 1.25, 0.05) #TODO adjust to dval_prev 
+    ''' # TODO REMOVE
+    for itno in range(10):
     
+        # Define c-ranges
+        cstart, cend = np.round([cval_prev - 1.2/(itno+1), cval_prev + 1.25/(itno+1)], 2)
+        crange = np.linspace(cstart, cend, 49)
+        cstep = np.round(crange[1]-crange[0], 3)
+        print("\tcrange:\t", cstart, cend, cstep)
+        # Define d-ranges
+        dstart, dend = np.round([dval_prev - 1.2/(itno+1), dval_prev + 1.25/(itno+1)], 2)
+        drange = np.linspace(dstart, dend, 49)
+        dstep = np.round(drange[1]-drange[0], 3)
+        print("\tdrange:\t", dstart, dend, dstep)
     
-    # Compute the c and d parameters which optimize overlap using gradient method
-    gradopt, Qopt, opt_cd = offsetopt_cd(embedOcorr, embedEcorr, crange, drange,
-                                embedOcent, starpar[3],
-                                savetofits=True, savedir=imdir+"/offsetopt/cdscapes13", 
-                                gradoptname="gradopt_star{}".format(starno+1))
-    Qopts.append(Qopt), opts_cd.append(opt_cd)
-    print("Qopt, opt_cd:\t\t", Qopt, opt_cd)
-    
-    
+        
+        # Compute the c and d parameters which optimize overlap using gradient method
+        gradopt, Qopt, opt_cd = offsetopt_cd(embedOcorr, embedEcorr, crange, drange,
+                                    embedOcent, starpar[3],
+                                    savetofits=True, 
+                                    savedir=imdir+"/offsetopt/cdscapes15/star{}".format(starno+1), 
+                                    gradoptname="gradopt{}cstep{}dstep{}".format(itno, cstep, dstep))
+        cval_prev, dval_prev = opt_cd
+        print("Qopt, opt_cd:\t\t", Qopt, opt_cd)
+        
+        
     # Update c- and dscape
-    cscape[appendedOcent[1],appendedOcent[0]] = opt_cd[0]
-    dscape[appendedOcent[1],appendedOcent[0]] = opt_cd[1]
+    cscape[dataOcent[1],dataOcent[0]] = opt_cd[0]+offsets[starno][0]
+    dscape[dataOcent[1],dataOcent[0]] = opt_cd[1]+offsets[starno][1]
+    
+    # Append the best (i.e. last) optima parameters to list
+    Qopts.append(Qopt), opts_cd.append(opt_cd)
     
     
+# Save to fits
+savefits(cscape, 
+         imdir+"/offsetopt/cdscapes15/cscapes",
+         "cscape_tpl8".format(itno,cstart,cend,cstep))
+savefits(dscape, 
+         imdir+"/offsetopt/cdscapes15/dscapes",
+         "dscape_tpl8".format(itno,dstart,dend,dstep))
 
 
 
 # Determine bivariate third order polynomial fit to c- and dscapes if calc_cd==True
 if calc_cd:
-    # Determine x and y coordinates of evaluated points
-    c_xycoord, d_xycoord = cscape.nonzero(), dscape.nonzero()
+    # Determine x and y coordinates as well as the values of evaluated points
+    c_xycoord, d_xycoord = np.argwhere(~np.isnan(cscape)), np.argwhere(~np.isnan(dscape))
     cpoints, dpoints = np.dstack(c_xycoord)[0], np.dstack(d_xycoord)[0]
-    c_x, c_y, d_x, d_y = cpoints[:,1], cpoints[:,0], dpoints[:,1], dpoints[:,0]
-    # Third order bivariate polynomial fit
-    polynom_c = polyfit2d(c_x, c_y, cscape[c_xycoord], order=4) #TODO REWRITE USING MESHGRIDS
-    polynom_d = polyfit2d(d_x, d_y, dscape[d_xycoord], order=4)
+    c_x, c_y, d_x, d_y = cpoints[1,:], cpoints[0,:], dpoints[1,:], dpoints[0,:]
+    cval, dval = cscape[c_y, c_x], dscape[d_y, d_x]
+    
+    
     # Compute gridpoints for evaluation
     scapex, scapey = np.arange(0,cscape.shape[1],1), np.arange(0,cscape.shape[0],1)
     scape_xgrid, scape_ygrid = np.meshgrid(scapex, scapey)
+    # Compute coordinates in arcseconds
+    c_xarcs, c_yarcs = np.array([c_x - np.median(scapex), c_y]) * .126
+    d_xarcs, d_yarcs = np.array([d_x - np.median(scapex), d_y]) * .126
+    scapexarcs = (np.arange(0,cscape.shape[1],1) - np.median(scapex))*.126
+    scapeyarcs = np.arange(0,cscape.shape[0],1)*.126
+    scapexarcs_grid, scapeyarcs_grid = np.meshgrid(scapexarcs, scapeyarcs)
+    # Third order bivariate polynomial fit
+    polynom_c = polyfit2d(c_xarcs[cval>-3.], c_yarcs[cval>-3.], cval[cval>-3.], order=3) #TODO REWRITE USING MESHGRIDS
+    polynom_d = polyfit2d(d_xarcs[dval>-3.], d_yarcs[dval>-3.], dval[dval>-3.], order=3)
     # Evalutate fitted polynomial at gridpoints
-    polyfitdata_c = polyval2d(scape_xgrid, scape_ygrid, polynom_c)
-    polyfitdata_d = polyval2d(scape_xgrid, scape_ygrid, polynom_d)
+    polyfitdata_c = polyval2d(scapexarcs_grid, scapeyarcs_grid, polynom_c)
+    polyfitdata_d = polyval2d(scapexarcs_grid, scapeyarcs_grid, polynom_d)
     
     
     # Save results
-    savefits(cscape, imdir+"/offsetopt/cdscapes13", "cscape_tpl8")
-    savefits(dscape, imdir+"/offsetopt/cdscapes13", "dscape_tpl8")
-    savefits(polyfitdata_c, imdir+"/offsetopt/cdscapes13", "cscapefitted_tpl8")
-    savefits(polyfitdata_d, imdir+"/offsetopt/cdscapes13", "dscapefitted_tpl8")
+    savefits(polyfitdata_c, imdir+"/offsetopt/cdscapes15/cscapes", "cscapefitted_tpl8")
+    savefits(polyfitdata_d, imdir+"/offsetopt/cdscapes15/dscapes", "dscapefitted_tpl8")
     
     
     # Save c and d polynomial fits
-    if not os.path.exists(plotdir+"/cdscapes13/cscape"):
-        os.makedirs(savedir)
-    plt.imshow(polyfitdata_c, origin='lower')
-    plt.scatter(c_x, c_y, c=cscape[c_xycoord])
-    plt.savefig(plotdir+"/cdscapes13/cscape")
+    if not os.path.exists(plotdir+"/cdscapes15/cscape"):
+        os.makedirs(plotdir+"/cdscapes15/cscape")
+    elif os.path.exists(plotdir+"/cdscapes15/cscape"):
+        shutil.rmtree(plotdir+"/cdscapes15")
+        os.makedirs(plotdir+"/cdscapes15")
+    plt.imshow(polyfitdata_c, origin='lower', 
+               extent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]])
+    plt.scatter(c_xarcs, c_yarcs, c=cval)
+    plt.colorbar()
+    plt.title(r"c-scape")
+    plt.savefig(plotdir+"/cdscapes15/cscape")
     plt.show()
     
-    if not os.path.exists(plotdir+"/cdscapes13/dscape"):
-        os.makedirs(savedir)    
-    plt.imshow(polyfitdata_d, origin='lower')
-    plt.scatter(d_x, d_y, c=dscape[d_xycoord])
-    plt.savefig(plotdir+"/cdscapes13/dscape")
+    if not os.path.exists(plotdir+"/cdscapes15/dscape"):
+        os.makedirs(plotdir+"/cdscapes15/dscape")    
+    elif os.path.exists(plotdir+"/cdscapes15/dscape"):
+        shutil.rmtree(plotdir+"/cdscapes15")
+        os.makedirs(plotdir+"/cdscapes15/star{}")    
+    plt.imshow(polyfitdata_d, origin='lower',
+               extent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]])
+    plt.scatter(d_xarcs, d_yarcs, c=dval)
+    plt.colorbar()
+    plt.title(r"d-scape")
+    plt.savefig(plotdir+"/cdscapes15/dscape")
     plt.show()
+    
     
 
 
-
+# Determine bivariate third order polynomial fit to c- and dscapes if calc_cd==True
+if calc_cd:
+    # Determine x and y coordinates as well as the values of evaluated points
+    c_xycoord, d_xycoord = np.argwhere(~np.isnan(cscape)), np.argwhere(~np.isnan(dscape))
+    cpoints, dpoints = np.dstack(c_xycoord)[0], np.dstack(d_xycoord)[0]
+    c_x, c_y, d_x, d_y = cpoints[1,:], cpoints[0,:], dpoints[1,:], dpoints[0,:]
+    cval, dval = cscape[c_y, c_x], dscape[d_y, d_x]
+    
+    
+    # Compute gridpoints for evaluation
+    scapex, scapey = np.arange(0,cscape.shape[1],1), np.arange(0,cscape.shape[0],1)
+    scape_xgrid, scape_ygrid = np.meshgrid(scapex, scapey)
+    # Compute coordinates in arcseconds
+    c_xarcs, c_yarcs = np.array([c_x - np.median(scapex), c_y]) * .126
+    d_xarcs, d_yarcs = np.array([d_x - np.median(scapex), d_y]) * .126
+    scapexarcs = (np.arange(0,cscape.shape[1],1) - np.median(scapex))*.126
+    scapeyarcs = np.arange(0,cscape.shape[0],1)*.126
+    scapexarcs_grid, scapeyarcs_grid = np.meshgrid(scapexarcs, scapeyarcs)
+    # Third order univariate polynomial fit
+    polynom_c = np.polyfit(c_x[cval>-3.], cval[cval>-3.], 2)
+    polynom_d = np.polyfit(d_y[cval>-3.], dval[cval>-3.], 2)
+    # Evaluate the derived polynomials
+    polyval_c, polyval_d = np.polyval(polynom_c, ), np.polyval(polynom_d, d_x)
+    polyfitdata_c = np.tile(polyval_c, [len(scapey),len(scapex)])
+    polyfitdata_d = np.tile(polyval_d, [1,len(scapex)])
+    
+    
+    # Save results
+    savefits(polyfitdata_c, imdir+"/offsetopt/cdscapes16/cscapes", "cscapefitted_tpl8")
+    savefits(polyfitdata_d, imdir+"/offsetopt/cdscapes16/dscapes", "dscapefitted_tpl8")
+    
+    
+    # Save c and d polynomial fits
+    if not os.path.exists(plotdir+"/cdscapes16/cscape"):
+        os.makedirs(plotdir+"/cdscapes16/cscape")
+    elif os.path.exists(plotdir+"/cdscapes16/cscape"):
+        shutil.rmtree(plotdir+"/cdscapes16")
+        os.makedirs(plotdir+"/cdscapes16")
+    plt.imshow(polyfitdata_c, origin='lower', 
+               extent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]])
+    plt.scatter(c_xarcs, c_yarcs, c=cval)
+    plt.colorbar()
+    plt.title(r"c-scape")
+    plt.savefig(plotdir+"/cdscapes16/cscape")
+    plt.show()
+    
+    if not os.path.exists(plotdir+"/cdscapes16/dscape"):
+        os.makedirs(plotdir+"/cdscapes16/dscape")    
+    elif os.path.exists(plotdir+"/cdscapes16/dscape"):
+        shutil.rmtree(plotdir+"/cdscapes16")
+        os.makedirs(plotdir+"/cdscapes16/star{}")    
+    plt.imshow(polyfitdata_d, origin='lower',
+               extent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]])
+    plt.scatter(d_xarcs, d_yarcs, c=dval)
+    plt.colorbar()
+    plt.title(r"d-scape")
+    plt.savefig(plotdir+"/cdscapes16/dscape")
+    plt.show()
+    
+    
 
 
 
