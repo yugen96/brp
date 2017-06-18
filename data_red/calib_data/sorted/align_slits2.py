@@ -48,6 +48,16 @@ def extract_data(fname):
         hdul.close()
         
     return header, data
+    
+
+
+# Function which creates a directory
+def createdir(direc, replace=False):  
+    if not os.path.exists(direc):
+        os.makedirs(direc)
+    elif (os.path.exists(direc) and replace):
+        shutil.rmtree(direc)
+        os.makedirs(direc)    
 
 
 
@@ -133,9 +143,6 @@ def apersum_old(image, px, py, r):
             # Ommit nan and infinite values
             if np.isnan(pixval) or np.isinf(pixval):
                 continue
-            
-            if np.isnan(pixval):
-                print(pixval)
             
             # Append pixval to pixvals for calculation of median
             pixvals.append(pixval)
@@ -1250,24 +1257,23 @@ def offsetopt_well(ims, dxrange, dyrange, center, R,
     
     # PLOTS
     if saveims:
+        # Save 2d offset_arr
         saveim_png(offset_arr, pltsavedir+"/", 
-                   "offsetopt{}tpl8_dx{}dy{}".format(starno+1, 
-                                                     offsetopt_fitgauss[0],
-                                                     offsetopt_fitgauss[1]), 
+                   "offsetwell_optdx{}dy{}".format(offsetopt_fitgauss[0],
+                                                offsetopt_fitgauss[1]), 
                    colmap='coolwarm', orig='lower',
                    datextent=[np.min(dxrange), np.max(dxrange), np.min(dyrange), np.max(dyrange)],
                    xtag=r"$\delta_X$", ytag=r"$\delta_Y$")
         # Save offset_arr and paraboloid fit as 3D png
         save3Dim_png(dxgrid, dygrid, offset_arr, pltsavedir, 
-                     "offsetopt{}tpl8_gauss3Dv2".format(starno+1), 
+                     "offsetwellGauss3D_optdx{}dy{}".format(offsetopt_fitgauss[0],
+                                                         offsetopt_fitgauss[1]), 
                      fit=True, fitZdata=fitgauss2d, xtag=r"$\delta_X$", ytag=r"$\delta_Y$",
                      ztag=r"$\left( (O-E)/(O+E) \right)^2$")
         
-        
         # Save Gaussian finalim to fits file
-        savefits(finalim_gauss, imsavedir, "O-E_star{}dx{}dy{}".format(starno+1,
-                                                                      offsetopt_fitgauss[0],
-                                                                      offsetopt_fitgauss[1]))
+        savefits(finalim_gauss, imsavedir, "O-E_dx{}dy{}".format(offsetopt_fitgauss[0],
+                                                                 offsetopt_fitgauss[1]))
     
     return(offsetopt_fitgauss, offset_arr, finalim_gauss)
 
@@ -1297,75 +1303,81 @@ def gaussian2d(xy, x0, y0, z0, sigx, sigy, A):
 
 
 # Function which computes optimal offsets for overlap using the gradient method
-def offsetopt_cd(O, E, crange, drange, center, R, savetofits=False,
-                 pltsavedir=None, imsavedir=None, gradoptname=None, starno=-99):
+def offsetopt_cd(O, E, crange, drange, center, R, iteration=0, 
+                 savetofits=False, pltsavedir=None, imsavedir=None):
+    
+    # Create the save directories
+    createdir(pltsavedir), createdir(imsavedir)
     
     # Determination of c and d (gradient method)
     slitdiff, slitsum = O-E, O+E    
     grady, gradx = np.gradient(O)
     
     
-    # Plot Gradients and 
-    f, (ax1, ax2, ax3) = plt.subplots(1, 3, sharey=True)
-    V_min, V_max = -np.max(np.abs(gradx[~np.isnan(gradx)])), np.max(np.abs(gradx[~np.isnan(gradx)]))
-    dat1 = ax1.imshow(gradx, origin='lower', cmap="afmhot", 
-                      extent=[-center[0], gradx.shape[1]-center[0], 
-                              -center[1], gradx.shape[0]-center[1]], 
-                      vmin=V_min, vmax=V_max)
-    dat2 = ax2.imshow(grady, origin='lower', cmap="afmhot", 
-                      extent=[-center[0], gradx.shape[1]-center[0], 
-                              -center[1], gradx.shape[0]-center[1]], 
-                      vmin=V_min, vmax=V_max)
-    dat3 = ax3.imshow(slitdiff, origin='lower', cmap="afmhot", 
-                      extent=[-center[0], gradx.shape[1]-center[0], 
-                              -center[1], gradx.shape[0]-center[1]], 
-                      vmin=V_min, vmax=V_max)
-    plt.colorbar(dat1)
-    for ax, title in zip([ax1, ax2, ax3], [r"$\nabla_x (O)$", r"$\nabla_y (O)$", r"$O-E$"]):
-        ax.set_xlabel("X [pixel]", fontsize=20)
-        if ax == ax1: ax.set_ylabel("Y [pixel]", fontsize=20)
-        ax.set_title('{}'.format(title), fontsize=24)
-    plt.savefig(pltsavedir+"/star{}__grad_O-E.png".format(starNr))
-    plt.show()
-    plt.close()
-    
-    
-    # x-gradient profile
-    plt.figure()
-    #plt.plot(np.arange(0,O.shape[0]), E[:,center[0]], color="y", marker='s', label=r"$E$")
-    #plt.plot(np.arange(0,O.shape[0]), O[:,center[0]], color="g", marker='o', label=r"$O$")
-    #print(np.max((E-O)[:,center[0]], np.max(gradx[:,center[0]])))
-    O_E, Ogradx = (O-E)[center[1],:], gradx[center[1],:]
-    normval1 = np.max(np.abs(O_E[~np.isnan(O_E)]))
-    normval2 = np.max(np.abs(Ogradx[~np.isnan(Ogradx)]))
-    print(O_E[~np.isnan(O_E)])
-    plt.plot(np.arange(0,O[~np.isnan(O_E)].shape[0]), O_E[~np.isnan(O_E)]/normval1, color="r", marker='x', linestyle='--', label=r"$O-E$")
-    plt.plot(np.arange(0,O[~np.isnan(Ogradx)].shape[0]), Ogradx[~np.isnan(Ogradx)]/normval2, color="b", marker='v', label=r"$\nabla_x (O)$")
-    plt.legend(loc='best')
-    plt.xlabel("Pixel", fontsize=20), plt.ylabel("Normalized Counts [---]", fontsize=20)
-    plt.title("Stellar y-profile", fontsize=20)
-    plt.savefig(pltsavedir+"/star{}__gradxProfile.png".format(starNr))
-    plt.show()
-    plt.close()
-    
+    # Plot gradients and O-E
+    if iteration == 0:
+        f, (ax1, ax2, ax3) = plt.subplots(1, 3, sharey=True)
+        V_min, V_max = -np.max(np.abs(gradx[~np.isnan(gradx)])), np.max(np.abs(gradx[~np.isnan(gradx)]))
+        dat1 = ax1.imshow(gradx, origin='lower', cmap="afmhot", 
+                          extent=[-center[0], gradx.shape[1]-center[0], 
+                                  -center[1], gradx.shape[0]-center[1]], 
+                          vmin=V_min, vmax=V_max)
+        dat2 = ax2.imshow(grady, origin='lower', cmap="afmhot", 
+                          extent=[-center[0], gradx.shape[1]-center[0], 
+                                  -center[1], gradx.shape[0]-center[1]], 
+                          vmin=V_min, vmax=V_max)
+        dat3 = ax3.imshow(slitdiff, origin='lower', cmap="afmhot", 
+                          extent=[-center[0], gradx.shape[1]-center[0], 
+                                  -center[1], gradx.shape[0]-center[1]], 
+                          vmin=V_min, vmax=V_max)
+        plt.colorbar(dat1)
+        for ax, title in zip([ax1, ax2, ax3], [r"$\nabla_x (O)$", r"$\nabla_y (O)$", r"$O-E$"]):
+            ax.set_xlabel("X [pixel]", fontsize=20)
+            if ax == ax1: ax.set_ylabel("Y [pixel]", fontsize=20)
+            ax.set_title('{}'.format(title), fontsize=24)
+        plt.savefig(pltsavedir+"/grad_O-E.png")
+        #plt.show()
+        plt.close()
         
-    # y-gradient profile
-    plt.figure()
-    #plt.plot(np.arange(0,O.shape[0]), E[:,center[0]], color="y", marker='s', label=r"$E$")
-    #plt.plot(np.arange(0,O.shape[0]), O[:,center[0]], color="g", marker='o', label=r"$O$")
-    #print(np.max((E-O)[:,center[0]], np.max(grady[:,center[0]])))
-    O_E, Ogrady = (O-E)[:,center[0]], grady[:,center[0]]
-    normval1 = np.max(np.abs(O_E[~np.isnan(O_E)]))
-    normval2 = np.max(np.abs(Ogrady[~np.isnan(Ogrady)]))
-    print(O_E[~np.isnan(O_E)])
-    plt.plot(np.arange(0,O[~np.isnan(O_E)].shape[0]), O_E[~np.isnan(O_E)]/normval1, color="r", marker='x', linestyle='--', label=r"$O-E$")
-    plt.plot(np.arange(0,O[~np.isnan(Ogrady)].shape[0]), Ogrady[~np.isnan(Ogrady)]/normval2, color="b", marker='v', label=r"$\nabla_y (O)$")
-    plt.legend(loc='best')
-    plt.xlabel("Pixel", fontsize=20), plt.ylabel("Normalized Counts [---]", fontsize=20)
-    plt.title("Stellar y-profile", fontsize=20)
-    plt.savefig(pltsavedir+"/star{}__gradyProfile.png".format(starNr))
-    plt.show()
-    plt.close()
+        
+        # x-gradient profile
+        plt.figure()
+        #plt.plot(np.arange(0,O.shape[0]), E[:,center[0]], color="y", marker='s', label=r"$E$")
+        #plt.plot(np.arange(0,O.shape[0]), O[:,center[0]], color="g", marker='o', label=r"$O$")
+        #print(np.max((E-O)[:,center[0]], np.max(gradx[:,center[0]])))
+        O_E, Ogradx = (O-E)[center[1],:], gradx[center[1],:]
+        normval1 = np.max(np.abs(O_E[~np.isnan(O_E)]))
+        normval2 = np.max(np.abs(Ogradx[~np.isnan(Ogradx)]))
+        plt.plot(np.arange(0,O_E[~np.isnan(O_E)].shape[0]), 
+                 O_E[~np.isnan(O_E)]/normval1, color="r", marker='x', linestyle='--', label=r"$O-E$")
+        plt.plot(np.arange(0,Ogradx[~np.isnan(Ogradx)].shape[0]), 
+                 Ogradx[~np.isnan(Ogradx)]/normval2, color="b", marker='v', label=r"$\nabla_x (O)$")
+        plt.legend(loc='best')
+        plt.xlabel("Pixel", fontsize=20), plt.ylabel("Normalized Counts [---]", fontsize=20)
+        plt.title("Stellar x-profile", fontsize=20)
+        plt.savefig(pltsavedir+"/gradxProfile.png")
+        #plt.show()
+        plt.close()
+        
+            
+        # y-gradient profile
+        plt.figure()
+        #plt.plot(np.arange(0,O.shape[0]), E[:,center[0]], color="y", marker='s', label=r"$E$")
+        #plt.plot(np.arange(0,O.shape[0]), O[:,center[0]], color="g", marker='o', label=r"$O$")
+        #print(np.max((E-O)[:,center[0]], np.max(grady[:,center[0]])))
+        O_E, Ogrady = (O-E)[:,center[0]], grady[:,center[0]]
+        normval1 = np.max(np.abs(O_E[~np.isnan(O_E)]))
+        normval2 = np.max(np.abs(Ogrady[~np.isnan(Ogrady)]))
+        plt.plot(np.arange(0,O_E[~np.isnan(O_E)].shape[0]), O_E[~np.isnan(O_E)]/normval1, color="r", marker='x', linestyle='--', label=r"$O-E$")
+        plt.plot(np.arange(0,Ogrady[~np.isnan(Ogrady)].shape[0]), 
+                 Ogrady[~np.isnan(Ogrady)]/normval2, color="b", marker='v', label=r"$\nabla_y (O)$")
+        plt.legend(loc='best')
+        plt.xlabel("Pixel", fontsize=20), plt.ylabel("Normalized Counts [---]", fontsize=20)
+        plt.title("Stellar y-profile", fontsize=20)
+        plt.savefig(pltsavedir+"/gradyProfile.png")
+        #plt.show()
+        plt.close()
+    
     
     
     Qmin_cd, Qmin = np.array([0,0]), np.inf
@@ -1394,13 +1406,20 @@ def offsetopt_cd(O, E, crange, drange, center, R, savetofits=False,
         plt.colorbar(dat1)
         dat2 = ax2.imshow(gradopt, origin='lower', cmap="afmhot")
         plt.colorbar(dat2)
-        plt.show()
+        #plt.show()
         plt.close()
         
         # Save the gradient corrected slit
-        savefits(gradopt, savedir, "star{}__O-E-bg-grad_c{}d{}".format(starNr, 
-                                                          np.round(Qmin_cd[0],3), 
-                                                          np.round(Qmin_cd[1],3)))
+        saveim_png(gradopt[center[1]-25:center[1]+25,center[0]-25:center[0]+25], pltsavedir, 
+                   "O-E-bg-grad{}_c{}d{}".format(iteration,
+                                                 np.round(Qmin_cd[0],3), 
+                                                 np.round(Qmin_cd[1],3)),
+                   colmap="afmhot", datextent=[-25, 25, -25, 25], 
+                   xtag=r"X [pixel]", ytag=r"Y [pixel]")
+                   
+        savefits(gradopt[~np.isnan(gradopt)], imsavedir, "O-E-bg-grad{}_c{}d{}".format(iteration,
+                                                                   np.round(Qmin_cd[0],3), 
+                                                                   np.round(Qmin_cd[1],3)))
     
     return (gradopt, Qmin, Qmin_cd)
     
@@ -1493,6 +1512,7 @@ teststddata = [std_dirs[0] + "/tpl3/FORS2.2011-05-04T00:05:36.569.fits", # RETA 
 # Specify science data directories
 scidatadir = datadir + "/sorted/NGC4696,IPOL"
 sci_dirs = [scidatadir + "/CHIP1"]
+testscitpl = sci_dirs[0] + "/tpl8"
 testscidata = sci_dirs[0] + "/tpl8/corrected2/FORS2.2011-05-04T01:31:46.334_COR.fits" # RETA POSANG 45 deg # j=7, k=1
 # Combine data dirs in list
 testdata_fnames = [teststddata[0], teststddata[1], testscidata]
@@ -1524,7 +1544,7 @@ star_lst_sci = [[335, 904, 807, 5, 5], [514, 869, 773, 7, 5], [1169, 907, 811, 5
                 [990, 140, 48, 11, 1], [1033, 157, 65, 9, 1], [1172, 147, 55, 7, 1], 
                 [1315, 164, 71, 8, 1], [1549, 164, 72, 13, 1]] #[pixel] # 32 stars
 star_lst_stdVELA = [[1034, 347, 251, 15, 2], [1177, 368, 273, 8, 2], [319, 345, 250, 5, 2], [281, 499, 403, 6, 3], [414, 139, 45, 12, 1], [531, 706, 609, 5, 4], [1583, 322, 229, 3, 2], [1779, 321, 224, 4, 2], [1294, 725, 627, 4, 4], [1501, 719, 622, 7, 4]] #[pixel] # 10 stars
-star_lst_stdWD = [[1039, 347, 253, 12, 2], [599, 541, 446, 5, 3], [365, 700, 604, 5, 4], [702, 903, 806, 6, 5], [801, 136, 43, 4, 1], [1055, 133, 43, 4, 1], [1186, 130, 37, 4, 1], [1132, 685, 592, 3, 4], [1222, 685, 592, 4, 4], [1395, 679, 587, 4, 4], [1413, 912, 816, 5, 5], [1655, 542, 449, 5, 3], [1643, 512, 417, 5, 3], [1632, 190, 97, 6, 1], [1608, 178, 85, 4, 1]] #[pixel] # 17 stars           
+star_lst_stdWD = [[1039, 347, 253, 12, 2], [599, 541, 446, 5, 3], [365, 700, 604, 5, 4], [702, 903, 806, 6, 5], [801, 136, 43, 4, 1], [1055, 133, 43, 4, 1], [1186, 130, 37, 4, 1], [1132, 685, 592, 3, 4], [1222, 685, 592, 4, 4], [1395, 679, 587, 4, 4], [1413, 912, 816, 5, 5], [1655, 542, 449, 5, 3], [1643, 512, 417, 5, 3], [1632, 190, 97, 6, 1], [1608, 178, 85, 4, 1]] #[pixel] # 15 stars           
 # Combine star lists
 star_lsts = [star_lst_stdVELA, star_lst_stdWD, star_lst_sci]
 
@@ -1597,7 +1617,7 @@ plt.close()
 
 # Initialize lists for storing results as well as the offset ranges
 dxrange, dyrange, interpf = np.arange(-6,7,1), np.arange(-6,7,1), 5
-optpixoffsets, wells, interpslits = [[],[]], [[],[]], []
+optpixoffsets, wells, interpslits = [], [], []
 # Define aperture and anulus radii
 R, anRmin, anRmax = 6, int(1.2*6), int(2*6)
 # Lists for storing the optimal Q and c-/d-values
@@ -1625,6 +1645,7 @@ for testdata_fname, slits, star_lst in zip(testdata_fnames, slits_lst, star_lsts
     data = (data - Mbias) / Mflat_norm
 
     
+    optpixoffsets_sub1, wells_sub1 = [], []
     # DETERMINE PIXEL-WISE OFFSETS FOR ALL STARS USING OFFSETOPT_WELL
     for starno, starpar in enumerate(star_lst):
         
@@ -1708,7 +1729,7 @@ for testdata_fname, slits, star_lst in zip(testdata_fnames, slits_lst, star_lsts
                                                 slitOcent, R, saveims=True, 
                                                 pltsavedir=pltsavedir+"/star{}".format(starno+1),
                                                 imsavedir=imsavedir+"/star{}".format(starno+1))
-        optpixoffsets[0].append(offsetopt), wells[0].append(well)
+        optpixoffsets_sub1.append(offsetopt), wells_sub1.append(well)
         
         
         '''
@@ -1719,19 +1740,18 @@ for testdata_fname, slits, star_lst in zip(testdata_fnames, slits_lst, star_lsts
         plt.show()
         plt.close()
         '''
-        
-        
-    # Save the stellar pixel-accurate offsets and the stellar offset wells to np savefiles
-    if calc_well:
-        savenp(wells[0], datasavedir, "wells")
-        savenp(optpixoffsets[0], datasavedir, "optpixoffsets")     
-        
     
+    
+    if calc_well:
+        savenp(optpixoffsets_sub1, datasavedir, 
+               "optpixoffsets_{}".format(datasavedir.split("/")[-1]))
+        savenp(wells_sub1, datasavedir, "wells_{}".format(datasavedir.split("/")[-1]))
     
     
     
         
     # DETERMINE C- AND D-VALUES OF ALL STARS
+    Qopts_sub1, opts_cd_sub1 = [], []
     for starno, starpar in enumerate(star_lst):
         
         
@@ -1745,8 +1765,13 @@ for testdata_fname, slits, star_lst in zip(testdata_fnames, slits_lst, star_lsts
         
         
         # Load the pixel-accurate offsets
-        offsets = np.load(datasavedir+"/optpixoffsets.npy")
-        wells = np.load(datasavedir+"/wells.npy")
+        if calc_well == False:
+            offsets = np.load(datasavedir+
+                              "/optpixoffsets_{}.npy".format(datasavedir.split("/")[-1]))
+            wells = np.load(datasavedir+"/wells_{}.npy".format(datasavedir.split("/")[-1]))
+        else:
+            offsets = np.array(optpixoffsets_sub1)
+            wells = np.array(wells_sub1)
         
         
         # Extract ordinary and extraordinary slit
@@ -1848,7 +1873,7 @@ for testdata_fname, slits, star_lst in zip(testdata_fnames, slits_lst, star_lsts
         '''
         dval_prev = dscape_prev[appendedOcent[1], appendedOcent[0]]
         ''' # TODO REMOVE
-        for itno in range(10):
+        for itno in range(5):
             
             # Define c-ranges
             cstart, cend = np.round([cval_prev - 2/(itno+1), cval_prev + 2/(itno+1)], 2)
@@ -1865,10 +1890,9 @@ for testdata_fname, slits, star_lst in zip(testdata_fnames, slits_lst, star_lsts
             # Compute the c and d parameters which optimize overlap using gradient method
             gradopt, Qopt, opt_cd = offsetopt_cd(embedOcorr, embedEcorr, crange, drange,
                                                  embedOcent, starpar[3],
-                                                 savetofits=True, 
+                                                 savetofits=True, iteration=itno, 
                                 pltsavedir=pltsavedir+"/star{}".format(starno+1), 
-                                imsavedir=imsavedir+"/star{}".format(starno+1), 
-                                gradoptname="gradopt{}cstep{}dstep{}".format(itno, cstep, dstep))
+                                imsavedir=imsavedir+"/star{}".format(starno+1))
             cval_prev, dval_prev = opt_cd
             print("Qopt, opt_cd:\t\t", Qopt, opt_cd)
             
@@ -1878,10 +1902,30 @@ for testdata_fname, slits, star_lst in zip(testdata_fnames, slits_lst, star_lsts
         dscape[dataOcent[1],dataOcent[0]] = opt_cd[1]+offsets[starno][1]
         
         # Append the best (i.e. last) optima parameters to list
-        Qopts.append(Qopt), opts_cd.append(opt_cd)
+        Qopts_sub1.append(Qopt), opts_cd_sub1.append(opt_cd)
+    
     
 
+    # Append sublists to main lists
+    if calc_well:
+        optpixoffsets.append(np.array(optpixoffsets_sub1))
+        wells.append(np.array(wells_sub1))
+    elif calc_cd:
+        Qopts.append(np.array(Qopts_sub1))
+        opts_cd.append(np.array(opt_cd)) 
+        
 
+
+# Save the stellar pixel-accurate offsets and the stellar offset wells to np savefiles
+if calc_well:
+    savenp(wells, npsavedir, "wells")
+    savenp(optpixoffsets, npsavedir, "optpixoffsets") 
+elif calc_cd:
+    savenp(Qopts, npsavedir, "Qopts")
+    savenp(opts_cd, npsavedir, "opts_cd") 
+    savenp(cscape, npsavedir, "cscape")
+    savenp(dscape, npsavedir, "dscape")
+    
 
 
 # Determine bivariate third order polynomial fit to c- and dscapes if calc_cd==True
@@ -1891,37 +1935,47 @@ if calc_cd:
     cpoints, dpoints = np.dstack(c_xycoord)[0], np.dstack(d_xycoord)[0]
     c_x, c_y, d_x, d_y = cpoints[1,:], cpoints[0,:], dpoints[1,:], dpoints[0,:]
     cval, dval = cscape[c_y, c_x], dscape[d_y, d_x]
-    
-    
+
+
     # Compute gridpoints for evaluation
     scapex, scapey = np.arange(0,cscape.shape[1],1), np.arange(0,cscape.shape[0],1)
     scape_xgrid, scape_ygrid = np.meshgrid(scapex, scapey)
     # Compute coordinates in arcseconds
     c_xarcs, c_yarcs = np.array([c_x - np.median(scapex), c_y]) * .126
     d_xarcs, d_yarcs = np.array([d_x - np.median(scapex), d_y]) * .126
-    scapexarcs = (np.arange(0,cscape.shape[1],1) - np.median(scapex))*.126
-    scapeyarcs = np.arange(0,cscape.shape[0],1)*.126
+    scapexarcs = (scapex - np.median(scapex))*.126
+    scapeyarcs = scapey*.126
     scapexarcs_grid, scapeyarcs_grid = np.meshgrid(scapexarcs, scapeyarcs)
+
+    # Third order bivariate polynomial fit
+    polynom_c = polyfit2d(c_xarcs, c_yarcs, cscape[c_xycoord[:,0],c_xycoord[:,1]], order=3)
+    polynom_d = polyfit2d(d_xarcs, d_yarcs, dscape[d_xycoord[:,0],d_xycoord[:,1]], order=3)
+    # Evalutate fitted polynomial at gridpoints
+    polyfitdata_c = polyval2d(scapexarcs_grid, scapeyarcs_grid, polynom_c)
+    polyfitdata_d = polyval2d(scapexarcs_grid, scapeyarcs_grid, polynom_d)
+
+    '''
     # Third order univariate polynomial fit
     polynom_c = np.polyfit(c_x[cval>-3.], cval[cval>-3.], 2)
     polynom_d = np.polyfit(d_y[cval>-3.], dval[cval>-3.], 2)
     # Evaluate the derived polynomials
-    polyval_c, polyval_d = np.polyval(polynom_c, ), np.polyval(polynom_d, d_x)
+    polyval_c, polyval_d = np.polyval(polynom_c, c_x), np.polyval(polynom_d, d_x)
     polyfitdata_c = np.tile(polyval_c, [len(scapey),len(scapex)])
     polyfitdata_d = np.tile(polyval_d, [1,len(scapex)])
-    
-    
+    '''
+
+
     # Save results
-    savefits(polyfitdata_c, imsavedir+"/cdscapes", "cscapefitted")
-    savefits(polyfitdata_d, imsavedir+"/cdscapes", "dscapefitted")
-    
+    savefits(polyfitdata_c, imdir, "cscapefitted")
+    savefits(polyfitdata_d, imdir, "dscapefitted")
+
     # Save the third order polynomial fits as png images        
-    saveim_png(polyfitdata_c, plotdir+"/cdscapes", "cscape", 
+    saveim_png(polyfitdata_c, plotdir, "cscape", 
               datextent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]], 
               scatterpoints=[c_xarcs, c_yarcs], scattercol=cval, 
               title="c-scape")
               
-    saveim_png(polyfitdata_d, plotdir+"/cdscapes", "dscape", 
+    saveim_png(polyfitdata_d, plotdir, "dscape", 
               datextent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]], 
               scatterpoints=[d_xarcs, d_yarcs], scattercol=dval, 
               title="d-scape")
@@ -1929,30 +1983,25 @@ if calc_cd:
     # Save to fits
     savefits(cscape, imdir+"/cdscapes","cscape")
     savefits(dscape, imdir+"/cdscapes", "dscape")
-    
+
         
-    '''
+
     plt.imshow(polyfitdata_c, origin='lower', 
                extent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]])
     plt.scatter(c_xarcs, c_yarcs, c=cval)
     plt.colorbar()
     plt.title(r"c-scape")
-    plt.savefig(pltsavedir+"/star{}/")
+    plt.savefig(plotdir+"/cscape.png")
     plt.show()
-    
-    if not os.path.exists(plotdir+"/cdscapes16/dscape"):
-        os.makedirs(plotdir+"/cdscapes16/dscape")    
-    elif os.path.exists(plotdir+"/cdscapes16/dscape"):
-        shutil.rmtree(plotdir+"/cdscapes16")
-        os.makedirs(plotdir+"/cdscapes16/star{}")    
+
     plt.imshow(polyfitdata_d, origin='lower',
                extent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]])
     plt.scatter(d_xarcs, d_yarcs, c=dval)
     plt.colorbar()
     plt.title(r"d-scape")
-    plt.savefig(plotdir+"/cdscapes16/dscape")
+    plt.savefig(plotdir+"/dscape.png")
     plt.show()
-    '''
+
 
 
 
