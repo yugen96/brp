@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from astropy.io import fits
 from itertools import product as carthprod
 import shutil
@@ -619,9 +620,9 @@ def saveim_png(data, savedir, fname, colmap='coolwarm',
 
 # Show and save offset_arr
 def save3Dim_png(Xgrid, Ygrid, Zdata, savedir, fname, dataplttype='scatter',
-                 fit=False, fitZdata=None, fitdataplttype='surface',
-                 colour='r', colmap='coolwarm', rowstride=1, colstride=1, lw=0,
-                 xtag='X', ytag='Y', ztag='Z', title=None):
+                 fit=False, fitXgrid=None, fitYgrid=None, fitZdata=None, 
+                 fitdataplttype='surface', colour='r', colmap='coolwarm', 
+                 rowstride=1, colstride=1, lw=0, xtag='X', ytag='Y', ztag='Z', title=None):
     
     # Initiate plot
     fig = plt.figure()
@@ -639,9 +640,9 @@ def save3Dim_png(Xgrid, Ygrid, Zdata, savedir, fname, dataplttype='scatter',
     # Plot fitdata
     if fit == True:
         if fitdataplttype == 'scatter':
-            fitplt = ax.scatter(Xgrid, Ygrid, fitZdata, color=colour)
+            fitplt = ax.scatter(fitXgrid, fitYgrid, fitZdata, color=colour)
         elif fitdataplttype == 'surface':
-            fitplt = ax.plot_surface(Xgrid, Ygrid, fitZdata, cmap=colmap, 
+            fitplt = ax.plot_surface(fitXgrid, fitYgrid, fitZdata, cmap=colmap, 
                                      rstride=rowstride, cstride=colstride, 
                                      linewidth=lw, antialiased=False)
             fig.colorbar(fitplt, shrink=1.0, aspect=20)
@@ -654,7 +655,7 @@ def save3Dim_png(Xgrid, Ygrid, Zdata, savedir, fname, dataplttype='scatter',
     if not title == None:
         plt.title(title, fontsize=24)
     plt.savefig(savedir + '/' + fname + ".png")
-    # plt.show()
+    plt.show()
     plt.close()   
     
     
@@ -1512,8 +1513,7 @@ teststddata = [std_dirs[0] + "/tpl3/FORS2.2011-05-04T00:05:36.569.fits", # RETA 
 # Specify science data directories
 scidatadir = datadir + "/sorted/NGC4696,IPOL"
 sci_dirs = [scidatadir + "/CHIP1"]
-testscitpl = sci_dirs[0] + "/tpl8"
-testscidata = sci_dirs[0] + "/tpl8/corrected2/FORS2.2011-05-04T01:31:46.334_COR.fits" # RETA POSANG 45 deg # j=7, k=1
+testscidata = sci_dirs[0] + "/tpl8/FORS2.2011-05-04T01:31:46.334.fits" # RETA POSANG 45 deg # j=7, k=1
 # Combine data dirs in list
 testdata_fnames = [teststddata[0], teststddata[1], testscidata]
 # Load testdata
@@ -1557,7 +1557,7 @@ r_range = np.arange(1, 16) #[pixels]
 pixscale = 0.126 #[arcsec/pixel]
 # Boolean variable for switchin on polarization computations of selected stars
 compute_anew = False
-calc_well, calc_cd = False, True
+calc_well, calc_cd = False, False
 
 
 
@@ -1625,11 +1625,40 @@ Qopts, opts_cd = [], []
 cscape = np.tile(np.nan, np.array(Mbias.shape))
 dscape = np.tile(np.nan, np.array(Mbias.shape))
 
-# Compute the offset wells for all stars
-for testdata_fname, slits, star_lst in zip(testdata_fnames, slits_lst, star_lsts):
+'''
+# Compute the offset wells for all stars within all exposures of all templates
+# Iterate over all objects (Vela1_95, WD1615_154, NGC4696)
+for i, objdir in enumerate([std_dirs[0], std_dirs[1], scidatadir]):
+    print("OBJECT:\t", objdir.split("/")[-2])
+    if objdir.split("/")[-2] == "":
+    
+    # Create list with templates
+    tpl_dirlst, tpl_flst = mk_lsts(obj_dir)
+    tpl_dirlst = np.sort(tpl_dirlst)
+    
+    
+    # Iterate over all templates
+    for j, tpl_name in enumerate(tpl_dirlst):
+        print("\tTPL:\t", tpl_name)
+                        
+        # Create a list with filenames of files stored within tpldir
+        expdir_lst, expfile_lst = mk_lsts(tpl_dir)
+        expfile_lst = np.sort(expfile_lst)
+        
+        # Skip non-usable templates (non-usable templates should be put in a folder "skipped" or an equivalent directory which doesn't start with the string "tpl") or incomplete templates.
+        if (len(expfile_lst != 4) or
+            (objdir.split("/")[-2] == "Vela1_95" and tpl_name in ["tpl1", "tpl2", "tpl3"]) or
+            (objdir.split("/")[-2] == "NGC4696,IPOL" and tpl_name == "tpl5")): #TODO INCLUDE TPL5
+            print("\t skipped"))
+            continue
+'''
+    
+    
+for k, [fname, slits, star_lst] in enumerate(zip(fnames, slits_lst, star_lsts)):
+    print("\n\t\t {}".format(fname))
     
     # Define plot save directories
-    temp = testdata_fname.split(datadir+"/sorted/")[1]
+    temp = fname.split(datadir+"/sorted/")[1]
     pltsavedir = plotdir +"/"+ temp.split("/")[0]
     imsavedir = imdir +"/"+ temp.split("/")[0]
     if pltsavedir.split("/")[-1] == "STD,IPOL":
@@ -1640,7 +1669,7 @@ for testdata_fname, slits, star_lst in zip(testdata_fnames, slits_lst, star_lsts
     
     
     # Extract data
-    header, data = extract_data(testdata_fname)
+    header, data = extract_data(fname)
     # De-biasing and flat-fielding corrections
     data = (data - Mbias) / Mflat_norm
 
@@ -1651,7 +1680,7 @@ for testdata_fname, slits, star_lst in zip(testdata_fnames, slits_lst, star_lsts
         
         '''
         # Recall offsets for NGC4696 (already determined previously)
-        if testdata_fname == testscidata:
+        if fname == testscidata:
             # Load list with the filenames of the non-interpolated corrected slits
             aligneddirs, alignedfiles = mk_lsts(imdir+"/offsetopt/noninterp4")
             aligneddatadict = {}
@@ -1741,15 +1770,16 @@ for testdata_fname, slits, star_lst in zip(testdata_fnames, slits_lst, star_lsts
         plt.close()
         '''
     
-    
+    # Save results and append results to main list
     if calc_well:
         savenp(optpixoffsets_sub1, datasavedir, 
                "optpixoffsets_{}".format(datasavedir.split("/")[-1]))
         savenp(wells_sub1, datasavedir, "wells_{}".format(datasavedir.split("/")[-1]))
+        optpixoffsets.append(np.array(optpixoffsets_sub1))
+        wells.append(np.array(wells_sub1))
     
     
     
-        
     # DETERMINE C- AND D-VALUES OF ALL STARS
     Qopts_sub1, opts_cd_sub1 = [], []
     for starno, starpar in enumerate(star_lst):
@@ -1768,10 +1798,10 @@ for testdata_fname, slits, star_lst in zip(testdata_fnames, slits_lst, star_lsts
         if calc_well == False:
             offsets = np.load(datasavedir+
                               "/optpixoffsets_{}.npy".format(datasavedir.split("/")[-1]))
-            wells = np.load(datasavedir+"/wells_{}.npy".format(datasavedir.split("/")[-1]))
+            #wells = np.load(datasavedir+"/wells_{}.npy".format(datasavedir.split("/")[-1]))
         else:
             offsets = np.array(optpixoffsets_sub1)
-            wells = np.array(wells_sub1)
+            #wells = np.array(wells_sub1)
         
         
         # Extract ordinary and extraordinary slit
@@ -1905,12 +1935,8 @@ for testdata_fname, slits, star_lst in zip(testdata_fnames, slits_lst, star_lsts
         Qopts_sub1.append(Qopt), opts_cd_sub1.append(opt_cd)
     
     
-
-    # Append sublists to main lists
-    if calc_well:
-        optpixoffsets.append(np.array(optpixoffsets_sub1))
-        wells.append(np.array(wells_sub1))
-    elif calc_cd:
+    # Append results to main list
+    if calc_cd:
         Qopts.append(np.array(Qopts_sub1))
         opts_cd.append(np.array(opt_cd)) 
         
@@ -1929,89 +1955,246 @@ elif calc_cd:
 
 
 # Determine bivariate third order polynomial fit to c- and dscapes if calc_cd==True
-if calc_cd:
-    # Determine x and y coordinates as well as the values of evaluated points
-    c_xycoord, d_xycoord = np.argwhere(~np.isnan(cscape)), np.argwhere(~np.isnan(dscape))
-    cpoints, dpoints = np.dstack(c_xycoord)[0], np.dstack(d_xycoord)[0]
-    c_x, c_y, d_x, d_y = cpoints[1,:], cpoints[0,:], dpoints[1,:], dpoints[0,:]
-    cval, dval = cscape[c_y, c_x], dscape[d_y, d_x]
+if not calc_cd and not calc_well:
 
-
-    # Compute gridpoints for evaluation
-    scapex, scapey = np.arange(0,cscape.shape[1],1), np.arange(0,cscape.shape[0],1)
-    scape_xgrid, scape_ygrid = np.meshgrid(scapex, scapey)
-    # Compute coordinates in arcseconds
-    c_xarcs, c_yarcs = np.array([c_x - np.median(scapex), c_y]) * .126
-    d_xarcs, d_yarcs = np.array([d_x - np.median(scapex), d_y]) * .126
-    scapexarcs = (scapex - np.median(scapex))*.126
-    scapeyarcs = scapey*.126
-    scapexarcs_grid, scapeyarcs_grid = np.meshgrid(scapexarcs, scapeyarcs)
-
-    # Third order bivariate polynomial fit
-    polynom_c = polyfit2d(c_xarcs, c_yarcs, cscape[c_xycoord[:,0],c_xycoord[:,1]], order=3)
-    polynom_d = polyfit2d(d_xarcs, d_yarcs, dscape[d_xycoord[:,0],d_xycoord[:,1]], order=3)
-    # Evalutate fitted polynomial at gridpoints
-    polyfitdata_c = polyval2d(scapexarcs_grid, scapeyarcs_grid, polynom_c)
-    polyfitdata_d = polyval2d(scapexarcs_grid, scapeyarcs_grid, polynom_d)
-
+    # Load the c- and d-scapes
+    cscape = np.load(npsavedir+"/cscape.npy")
+    dscape = np.load(npsavedir+"/dscape.npy")
+    
+    # ARTIFICIAL POINT
     '''
-    # Third order univariate polynomial fit
-    polynom_c = np.polyfit(c_x[cval>-3.], cval[cval>-3.], 2)
-    polynom_d = np.polyfit(d_y[cval>-3.], dval[cval>-3.], 2)
-    # Evaluate the derived polynomials
-    polyval_c, polyval_d = np.polyval(polynom_c, c_x), np.polyval(polynom_d, d_x)
-    polyfitdata_c = np.tile(polyval_c, [len(scapey),len(scapex)])
-    polyfitdata_d = np.tile(polyval_d, [1,len(scapex)])
+    tempc, tempd = cscape[266:lowedges[4]], dscape[266:lowedges[4]]
+    cscape[367,843] = np.median(tempc[~np.isnan(tempc)])
+    dscape[367,843] = np.median(tempd[~np.isnan(tempd)])
+    dscape[320,873] = np.median(tempd[~np.isnan(tempd)])
+    dscape[320,1032] = np.median(tempd[~np.isnan(tempd)])
     '''
+    
+    # High influence points
+    maskind_c = [38, 27]
+    maskind_d = [22, 29, 45, 26, 50, 49, 19, 17, 23, 39, 40, 32, 5]
+    
+    # Plot cubic splines for both c- and d-
+    for scape, maskind, pltsavetitle, plttitle in zip([cscape, dscape], [maskind_c, maskind_d],
+                                                      ["c-scape2", "d-scape2"],
+                                                      [r"$\delta_x + c$", r"$\delta_y + d$"]):
+        
+        # Extract the x- and y-coordinates corresponding to points in c- and d-scapes
+        xycoord = np.argwhere(~np.isnan(scape))
+        points = np.dstack(xycoord)[0]
+        x, y = points[1,:], points[0,:]
+        # Determine the values of the points within c- and d-scape
+        val = scape[y,x]
+        # Compute gridpoints for evaluation
+        scapex, scapey = np.arange(0,scape.shape[1],1), np.arange(0,scape.shape[0],1)
+        scape_xgrid, scape_ygrid = np.meshgrid(scapex, scapey)
+        
+        # Convert coordinates to arcseconds
+        xarcs, yarcs = np.array([x - np.median(scapex), y]) * .126
+        scapexarcs, scapeyarcs = (scapex - np.median(scapex))*.126, scapey*.126
+        scapexarcs_grid, scapeyarcs_grid = np.meshgrid(scapexarcs, scapeyarcs)    
+        
+        # Determine cubic spline to the c- and d-values
+        scape_i = interpolate.griddata((xarcs, yarcs), val, 
+                                        (scapexarcs[None,:], scapeyarcs[:,None]), method='linear')
 
-
-    # Save results
-    savefits(polyfitdata_c, imdir, "cscapefitted")
-    savefits(polyfitdata_d, imdir, "dscapefitted")
-
-    # Save the third order polynomial fits as png images        
-    saveim_png(polyfitdata_c, plotdir, "cscape", 
-              datextent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]], 
-              scatterpoints=[c_xarcs, c_yarcs], scattercol=cval, 
-              title="c-scape")
-              
-    saveim_png(polyfitdata_d, plotdir, "dscape", 
-              datextent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]], 
-              scatterpoints=[d_xarcs, d_yarcs], scattercol=dval, 
-              title="d-scape")
-
-    # Save to fits
-    savefits(cscape, imdir+"/cdscapes","cscape")
-    savefits(dscape, imdir+"/cdscapes", "dscape")
-
+        # Contour the gridded data, plotting dots at the randomly spaced data points.
+        CS = plt.contour(scapexarcs,scapeyarcs,scape_i,15,linewidths=0.5)
+        CS = plt.contourf(scapexarcs,scapeyarcs,scape_i,15)
+        # Plot data points
+        plt.scatter(xarcs, yarcs, marker='o', s=50, c=val, cmap=CS.cmap, norm=CS.norm)
+        plt.colorbar() # draw colorbar
+        # Plot the slit boundaries
+        for i, [borderdown, borderup] in enumerate(zip(lowedges, upedges)):
+            if i == 0:   
+                plt.plot(scapexarcs, np.tile(.126*borderdown, len(scapexarcs)), color='k')
+            elif i != 0 and i != len(lowedges)-1:
+                plt.plot(scapexarcs, np.tile(.126*borderdown, len(scapexarcs)), 
+                         linestyle='--', color='k')
+            elif i == len(lowedges)-1:
+                plt.plot(scapexarcs, np.tile(.126*borderdown, len(scapexarcs)), 
+                         linestyle='--', color='k')
+                plt.plot(scapexarcs, np.tile(.126*borderup, len(scapexarcs)), color='k')
+            
+        plt.plot(np.tile(-120, len(scapeyarcs)), scapeyarcs, color='k')
+        plt.plot(np.tile(120, len(scapeyarcs)), scapeyarcs, color='k')
+        plt.xlabel(r"X [arcsec]", fontsize=20), plt.ylabel(r"Y [arcsec]", fontsize=20)
+        plt.title(r"{}".format(plttitle), fontsize=26)
+        plt.savefig(plotdir+"/"+pltsavetitle+".png")
+        plt.show()
         
 
-    plt.imshow(polyfitdata_c, origin='lower', 
-               extent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]])
-    plt.scatter(c_xarcs, c_yarcs, c=cval)
-    plt.colorbar()
-    plt.title(r"c-scape")
-    plt.savefig(plotdir+"/cscape.png")
-    plt.show()
+        # Mask high residual points
+        mval = np.delete(val, maskind)
+        m_x, m_y = np.delete(x, maskind), np.delete(y, maskind)
+        m_xarcs, m_yarcs = np.delete(xarcs, maskind), np.delete(yarcs, maskind)
+        
+        # Determine cubic spline to the c- and d-values
+        mscape_i = interpolate.griddata((m_xarcs, m_yarcs), mval, 
+                                        (scapexarcs[None,:], scapeyarcs[:,None]), method='linear')    
+        
+        # contour the gridded data, plotting dots at the randomly spaced data points.
+        CS = plt.contour(scapexarcs,scapeyarcs,mscape_i,15,linewidths=0.5)
+        CS = plt.contourf(scapexarcs,scapeyarcs,mscape_i,15)
+        # plot data points.
+        plt.scatter(m_xarcs, m_yarcs, marker='o', s=50, c=mval, cmap=CS.cmap, norm=CS.norm)
+        plt.colorbar() # draw colorbar
+        # Plot the slit boundaries
+        for i, [borderdown, borderup] in enumerate(zip(lowedges, upedges)):
+            if i == 0:   
+                plt.plot(scapexarcs, np.tile(.126*borderdown, len(scapexarcs)), color='k')
+            elif i != 0 and i != len(lowedges)-1:
+                plt.plot(scapexarcs, np.tile(.126*borderdown, len(scapexarcs)), 
+                         linestyle='--', color='k')
+            elif i == len(lowedges)-1:
+                plt.plot(scapexarcs, np.tile(.126*borderdown, len(scapexarcs)), 
+                         linestyle='--', color='k')
+                plt.plot(scapexarcs, np.tile(.126*borderup, len(scapexarcs)), color='k')
+            
+        plt.plot(np.tile(-120, len(scapeyarcs)), scapeyarcs, color='k')
+        plt.plot(np.tile(120, len(scapeyarcs)), scapeyarcs, color='k')
+        plt.xlabel(r"X [arcsec]", fontsize=20), plt.ylabel(r"Y [arcsec]", fontsize=20)
+        plt.title(r"{}".format(plttitle), fontsize=26)
+        plt.savefig(plotdir+"/"+pltsavetitle+"v2.png")
+        plt.show() 
+    
+    
+    
+    
+    
 
-    plt.imshow(polyfitdata_d, origin='lower',
-               extent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]])
-    plt.scatter(d_xarcs, d_yarcs, c=dval)
-    plt.colorbar()
-    plt.title(r"d-scape")
-    plt.savefig(plotdir+"/dscape.png")
-    plt.show()
+
+'''
+c_xycoord, d_xycoord = np.argwhere(~np.isnan(cscape)), np.argwhere(~np.isnan(dscape))
+cpoints, dpoints = np.dstack(c_xycoord)[0], np.dstack(d_xycoord)[0]
+c_x, c_y, d_x, d_y = cpoints[1,:], cpoints[0,:], dpoints[1,:], dpoints[0,:]
+cval, dval = cscape[c_y, c_x], dscape[d_y, d_x]
+
+# Compute gridpoints for evaluation
+scapex, scapey = np.arange(0,cscape.shape[1],1), np.arange(0,cscape.shape[0],1)
+scape_xgrid, scape_ygrid = np.meshgrid(scapex, scapey)
+# Compute coordinates in arcseconds
+c_xarcs, c_yarcs = np.array([c_x - np.median(scapex), c_y]) * .126
+d_xarcs, d_yarcs = np.array([d_x - np.median(scapex), d_y]) * .126
+scapexarcs = (scapex - np.median(scapex))*.126
+scapeyarcs = scapey*.126
+scapexarcs_grid, scapeyarcs_grid = np.meshgrid(scapexarcs, scapeyarcs)
+
+# Third order bivariate polynomial fit
+polynom_c = polyfit2d(c_xarcs, c_yarcs, cval, order=3)
+polynom_d = polyfit2d(d_xarcs, d_yarcs, dval, order=3)
+# Evalutate fitted polynomial at gridpoints
+polyfitdata_c = polyval2d(scapexarcs_grid, scapeyarcs_grid, polynom_c)
+polyfitdata_d = polyval2d(scapexarcs_grid, scapeyarcs_grid, polynom_d)
+'''
+
+'''
+# Third order univariate polynomial fit
+polynom_c = np.polyfit(c_x[cval>-3.], cval[cval>-3.], 2)
+polynom_d = np.polyfit(d_y[cval>-3.], dval[cval>-3.], 2)
+# Evaluate the derived polynomials
+polyval_c, polyval_d = np.polyval(polynom_c, c_x), np.polyval(polynom_d, d_x)
+polyfitdata_c = np.tile(polyval_c, [len(scapey),len(scapex)])
+polyfitdata_d = np.tile(polyval_d, [1,len(scapex)])
+'''
+
+'''
+plt.scatter(c_xarcs, cval, c=dval)
+plt.colorbar()
+plt.title(r"c-xprofile")
+plt.savefig(plotdir+"/xvsc.png")
+plt.show()
+
+plt.scatter(c_yarcs, cval, c=dval)
+plt.colorbar()
+plt.title(r"c-yprofile")
+plt.savefig(plotdir+"/yvsc.png")
+plt.show()
+
+plt.scatter(d_xarcs, dval, c=dval)
+plt.colorbar()
+plt.title(r"d-xprofile")
+plt.savefig(plotdir+"/xvsd.png")
+plt.show()
+
+plt.scatter(d_yarcs, dval, c=dval)
+plt.colorbar()
+plt.title(r"d-yprofile")
+plt.savefig(plotdir+"/yvsd.png")
+plt.show()
 
 
 
 
 
 
+# Save results
+savefits(polyfitdata_c, imdir, "cscapefitted")
+savefits(polyfitdata_d, imdir, "dscapefitted")
+
+# Save the third order polynomial fits as png images        
+saveim_png(polyfitdata_c, plotdir, "cscape", 
+          datextent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]], 
+          scatterpoints=[c_xarcs, c_yarcs], scattercol=cval, 
+          title="c-scape")
+
+saveim_png(polyfitdata_d, plotdir, "dscape", 
+          datextent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]], 
+          scatterpoints=[d_xarcs, d_yarcs], scattercol=dval, 
+          title="d-scape")
+
+# Save to fits
+savefits(cscape, imdir+"/cdscapes","cscape")
+savefits(dscape, imdir+"/cdscapes", "dscape")
 
 
+plt.imshow(polyfitdata_c, origin='lower', 
+           extent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]])
+plt.scatter(c_xarcs, c_yarcs, c=cval)
+plt.colorbar()
+plt.title(r"c-scape")
+plt.savefig(plotdir+"/cscape.png")
+plt.show()
+    
+plt.imshow(polyfitdata_d, origin='lower',
+           extent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]])
+plt.scatter(d_xarcs, d_yarcs, c=dval)
+plt.colorbar()
+plt.title(r"d-scape")
+plt.savefig(plotdir+"/dscape.png")
+plt.show()
+    
+    
+    
+    
+    
+# Mask high residual points
+maskind = [22, 29, 45, 26, 50, 49, 19, 17]
+mdval = np.delete(dval, maskind)
+md_xarcs = np.delete(d_xarcs, maskind)
+md_yarcs = np.delete(d_yarcs, maskind)
+
+# Third order bivariate polynomial fit
+mpolynom_d = polyfit2d(md_xarcs, md_yarcs-np.median(scapeyarcs), mdval, order=2)
+# Evalutate fitted polynomial at gridpoints
+mpolyfitdata_d = polyval2d(scapexarcs_grid, scapeyarcs_grid-np.median(scapeyarcs), mpolynom_d)    
+
+plt.imshow(mpolyfitdata_d, origin='lower',
+           extent=[scapexarcs[0],scapexarcs[-1],scapeyarcs[0],scapeyarcs[-1]])
+plt.scatter(md_xarcs, md_yarcs, c=mdval)
+plt.colorbar()
+plt.title(r"d-scape")
+plt.savefig(plotdir+"/mdscape.png")
+plt.show()      
+'''
 
 
-
-
-
+'''
+save3Dim_png(scapexarcs_grid, scapeyarcs_grid, dscape, 
+             plotdir, "dscape3D", dataplttype='scatter',
+             fit=True, fitXgrid=scapeyarcs_grid, fitYgrid=scapeyarcs_grid, 
+             fitZdata=polyfitdata_d, fitdataplttype='surface',
+             colmap='coolwarm', rowstride=1, colstride=1, lw=0,
+             xtag=r'X [arcsec]', ytag=r'Y [arcsec]', ztag='c')
+'''
 

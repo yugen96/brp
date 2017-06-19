@@ -48,6 +48,16 @@ def extract_data(fname):
         hdul.close()
         
     return header, data
+    
+    
+
+# Function which creates a directory
+def createdir(direc, replace=False):  
+    if not os.path.exists(direc):
+        os.makedirs(direc)
+    elif (os.path.exists(direc) and replace):
+        shutil.rmtree(direc)
+        os.makedirs(direc) 
 
 
 
@@ -154,7 +164,7 @@ def apersum_old(image, px, py, r):
     #print("DEBIG [apsum, apcount, mean]:\t\t", apsum, apcount, mean)
     #print("DEBUG [med, mean, poisson(med,mean)]:\t\t", med, mean, poisson.pmf(med,mean))
     
-    return [apsum, mean, med, rmse], [np.sqrt(abs(apsum)), mean_err, med_err], apcount
+    return [apsum, mean, med, rmse], [np.sqrt(abs(apsum)), mean_err, med_err]
     
     
 
@@ -610,7 +620,7 @@ def saveim_png(data, savedir, fname,
     if not os.path.exists(savedir):
         os.makedirs(savedir)
     plt.savefig(savedir + '/' + fname + ".png")
-    plt.show()
+    # plt.show()
     plt.close()
 
 
@@ -1280,39 +1290,81 @@ def gaussian2d(xy, x0, y0, z0, sigx, sigy, A):
 
 
 # Function which computes optimal offsets for overlap using the gradient method
-def offsetopt_cd(O, E, crange, drange, center, R, savetofits=False,
-                 imsavedir=None, pltsavedir=None, gradoptname=None):
+def offsetopt_cd(O, E, crange, drange, center, R, iteration=0, 
+                 savetofits=False, pltsavedir=None, imsavedir=None):
+    
+    # Create the save directories
+    createdir(pltsavedir), createdir(imsavedir)
     
     # Determination of c and d (gradient method)
     slitdiff, slitsum = O-E, O+E    
     grady, gradx = np.gradient(O)
-    savefits(gradx, imsavedir, "gradxtest")
-    savefits(grady, imsavedir, "gradytest")
     
-    # Diagnostic plots
-    f, (ax1, ax2) = plt.subplots(1, 2, sharey=True)
-    dat1 = ax1.imshow(slitdiff, origin='lower', cmap="afmhot")
-    plt.colorbar(dat1)
-    dat2 = ax2.imshow(grady, origin='lower', cmap="afmhot")
-    plt.colorbar(dat2)
-    plt.show()
-    plt.close()
     
-    plt.figure()
-    #plt.plot(np.arange(0,O.shape[0]), E[:,center[0]], color="y", marker='s', label=r"$E$")
-    #plt.plot(np.arange(0,O.shape[0]), O[:,center[0]], color="g", marker='o', label=r"$O$")
-    #print(np.max((E-O)[:,center[0]], np.max(grady[:,center[0]])))
-    E_O, Ogrady = (O-E)[:,center[0]], grady[:,center[0]]
-    normval1, normval2 = np.max(E_O[~np.isnan(E_O)]), np.max(Ogrady[~np.isnan(Ogrady)])
-    print(E_O[~np.isnan(E_O)])
-    plt.plot(np.arange(0,O[~np.isnan(E_O)].shape[0]), E_O[~np.isnan(E_O)]/normval1, color="r", marker='x', linestyle='--', label=r"$O-E$")
-    plt.plot(np.arange(0,O[~np.isnan(Ogrady)].shape[0]), Ogrady[~np.isnan(Ogrady)]/normval2, color="b", marker='v', label=r"$\nabla_y (O)$")
-    plt.legend(loc='best')
-    plt.xlabel("Pixel"), plt.ylabel("Normalized Counts [---]")
-    plt.title("Stellar y-profile ")
-    plt.savefig(pltsavedir+"grady_profile2")
-    plt.show()
-    plt.close()
+    # Plot gradients and O-E
+    if iteration == 0:
+        f, (ax1, ax2, ax3) = plt.subplots(1, 3, sharey=True)
+        V_min, V_max = -np.max(np.abs(gradx[~np.isnan(gradx)])), np.max(np.abs(gradx[~np.isnan(gradx)]))
+        dat1 = ax1.imshow(gradx, origin='lower', cmap="afmhot", 
+                          extent=[-center[0], gradx.shape[1]-center[0], 
+                                  -center[1], gradx.shape[0]-center[1]], 
+                          vmin=V_min, vmax=V_max)
+        dat2 = ax2.imshow(grady, origin='lower', cmap="afmhot", 
+                          extent=[-center[0], gradx.shape[1]-center[0], 
+                                  -center[1], gradx.shape[0]-center[1]], 
+                          vmin=V_min, vmax=V_max)
+        dat3 = ax3.imshow(slitdiff, origin='lower', cmap="afmhot", 
+                          extent=[-center[0], gradx.shape[1]-center[0], 
+                                  -center[1], gradx.shape[0]-center[1]], 
+                          vmin=V_min, vmax=V_max)
+        plt.colorbar(dat1)
+        for ax, title in zip([ax1, ax2, ax3], [r"$\nabla_x (O)$", r"$\nabla_y (O)$", r"$O-E$"]):
+            ax.set_xlabel("X [pixel]", fontsize=20)
+            if ax == ax1: ax.set_ylabel("Y [pixel]", fontsize=20)
+            ax.set_title('{}'.format(title), fontsize=24)
+        plt.savefig(pltsavedir+"/grad_O-E.png")
+        #plt.show()
+        plt.close()
+        
+        
+        # x-gradient profile
+        plt.figure()
+        #plt.plot(np.arange(0,O.shape[0]), E[:,center[0]], color="y", marker='s', label=r"$E$")
+        #plt.plot(np.arange(0,O.shape[0]), O[:,center[0]], color="g", marker='o', label=r"$O$")
+        #print(np.max((E-O)[:,center[0]], np.max(gradx[:,center[0]])))
+        O_E, Ogradx = (O-E)[center[1],:], gradx[center[1],:]
+        normval1 = np.max(np.abs(O_E[~np.isnan(O_E)]))
+        normval2 = np.max(np.abs(Ogradx[~np.isnan(Ogradx)]))
+        plt.plot(np.arange(0,O_E[~np.isnan(O_E)].shape[0]), 
+                 O_E[~np.isnan(O_E)]/normval1, color="r", marker='x', linestyle='--', label=r"$O-E$")
+        plt.plot(np.arange(0,Ogradx[~np.isnan(Ogradx)].shape[0]), 
+                 Ogradx[~np.isnan(Ogradx)]/normval2, color="b", marker='v', label=r"$\nabla_x (O)$")
+        plt.legend(loc='best')
+        plt.xlabel("Pixel", fontsize=20), plt.ylabel("Normalized Counts [---]", fontsize=20)
+        plt.title("Stellar x-profile", fontsize=20)
+        plt.savefig(pltsavedir+"/gradxProfile.png")
+        #plt.show()
+        plt.close()
+        
+            
+        # y-gradient profile
+        plt.figure()
+        #plt.plot(np.arange(0,O.shape[0]), E[:,center[0]], color="y", marker='s', label=r"$E$")
+        #plt.plot(np.arange(0,O.shape[0]), O[:,center[0]], color="g", marker='o', label=r"$O$")
+        #print(np.max((E-O)[:,center[0]], np.max(grady[:,center[0]])))
+        O_E, Ogrady = (O-E)[:,center[0]], grady[:,center[0]]
+        normval1 = np.max(np.abs(O_E[~np.isnan(O_E)]))
+        normval2 = np.max(np.abs(Ogrady[~np.isnan(Ogrady)]))
+        plt.plot(np.arange(0,O_E[~np.isnan(O_E)].shape[0]), O_E[~np.isnan(O_E)]/normval1, color="r", marker='x', linestyle='--', label=r"$O-E$")
+        plt.plot(np.arange(0,Ogrady[~np.isnan(Ogrady)].shape[0]), 
+                 Ogrady[~np.isnan(Ogrady)]/normval2, color="b", marker='v', label=r"$\nabla_y (O)$")
+        plt.legend(loc='best')
+        plt.xlabel("Pixel", fontsize=20), plt.ylabel("Normalized Counts [---]", fontsize=20)
+        plt.title("Stellar y-profile", fontsize=20)
+        plt.savefig(pltsavedir+"/gradyProfile.png")
+        #plt.show()
+        plt.close()
+    
     
     
     Qmin_cd, Qmin = np.array([0,0]), np.inf
@@ -1320,11 +1372,11 @@ def offsetopt_cd(O, E, crange, drange, center, R, savetofits=False,
         for d in drange:
             
             temp = (slitdiff - c*gradx - d*grady)**2
-            Qlst, Qlst_err, _ = apersum_old(temp, center[0], center[1], R)
+            Qlst, Qlst_err = apersum_old(temp, center[0], center[1], R)
             Q = Qlst[0]
             
             '''
-            savefits(slitdiff-c*gradx-d*grady, imsavedir+"/NONABS", 
+            savefits(slitdiff-c*gradx-d*grady, savedir+"/NONABS", 
                      "testc{}d{}".format(np.round([c,d],3)[0], np.round([c,d],3)))
             '''
             
@@ -1334,19 +1386,27 @@ def offsetopt_cd(O, E, crange, drange, center, R, savetofits=False,
                 gradopt = slitdiff - Qmin_cd[0]*gradx - Qmin_cd[1]*grady
     
     if savetofits:
+    
         # Diagnostic image
-        '''
         f, (ax1, ax2) = plt.subplots(1, 2, sharey=True)
         dat1 = ax1.imshow(slitdiff, origin='lower', cmap="afmhot")
         plt.colorbar(dat1)
         dat2 = ax2.imshow(gradopt, origin='lower', cmap="afmhot")
         plt.colorbar(dat2)
-        plt.show()
+        #plt.show()
         plt.close()
-        '''
+        
         # Save the gradient corrected slit
-        savefits(gradopt, imsavedir, gradoptname+"c{}d{}".format(np.round(Qmin_cd[0],3), 
-                                                               np.round(Qmin_cd[1],3)))
+        saveim_png(gradopt[center[1]-25:center[1]+25,center[0]-25:center[0]+25], pltsavedir, 
+                   "O-E-bg-grad{}_c{}d{}".format(iteration,
+                                                 np.round(Qmin_cd[0],3), 
+                                                 np.round(Qmin_cd[1],3)),
+                   colmap="afmhot", datextent=[-25, 25, -25, 25], 
+                   xtag=r"X [pixel]", ytag=r"Y [pixel]")
+                   
+        savefits(gradopt[~np.isnan(gradopt)], imsavedir, "O-E-bg-grad{}_c{}d{}".format(iteration,
+                                                                   np.round(Qmin_cd[0],3), 
+                                                                   np.round(Qmin_cd[1],3)))
     
     return (gradopt, Qmin, Qmin_cd)
     
@@ -1419,28 +1479,34 @@ testEgauss = gaussian2d([xgrid,ygrid], 45, 45.3, 0, 2, 2, 3).reshape(tabularasa.
 savefits(testOgauss, imdir+"/gradmethtest", "testO")
 savefits(testEgauss, imdir+"/gradmethtest", "testE")
 savefits(testOgauss-testEgauss, imdir+"/gradmethtest", "testslitdiff")
-saveim_png(testOgauss, imdir+"/gradmethtest", "testO", colmap="afmhot")
-saveim_png(testEgauss, imdir+"/gradmethtest", "testE", colmap="afmhot")
-saveim_png(testOgauss-testEgauss, imdir+"/gradmethtest", "testslitdiff", colmap="afmhot")
+saveim_png(testOgauss, plotdir+"/gradmethtest", "testO", colmap="afmhot")
+saveim_png(testEgauss, plotdir+"/gradmethtest", "testE", colmap="afmhot")
+saveim_png(testOgauss-testEgauss, plotdir+"/gradmethtest", "testslitdiff", colmap="afmhot")
 
 
 
-crange = np.arange(-0.25, .25, 0.005) #TODO adjust to cval_prev
-drange = np.arange(-.55, -.05, 0.05) #TODO adjust to dval_prev  
-'''
-crange = [0] #TODO adjust to cval_prev
-drange = np.arange(-.35, -.25, 0.005) #TODO adjust to dval_prev  
-'''
-
+cval_prev, dval_prev = 0, 0
 for itno in range(5):
+
+    # Define c-ranges
+    cstart, cend = np.round([cval_prev - 2/(itno+1), cval_prev + 2/(itno+1)], 2)
+    crange = np.linspace(cstart, cend, 49)
+    cstep = np.round(crange[1]-crange[0], 3)
+    print("\tcrange:\t", cstart, cend, cstep)
+    
+    # Define d-ranges
+    dstart, dend = np.round([dval_prev - 2/(itno+1), dval_prev + 2/(itno+1)], 2)
+    drange = np.linspace(dstart, dend, 49)
+    dstep = np.round(drange[1]-drange[0], 3)
+    print("\tdrange:\t", dstart, dend, dstep)
     
     # Compute the c and d parameters which optimize overlap using gradient method
     gradopt_old, Qopt, opt_cd = offsetopt_cd(testOgauss, testEgauss, crange, drange,
-                                [45,45], 10, savetofits=True, 
+                                [45,45], 10, iteration=itno, savetofits=True, 
                                 pltsavedir=plotdir+"/gradmethtest", 
-                                imsavedir=imdir+"/gradmethtest", gradoptname="gradopttest2_{}".format(itno))
+                                imsavedir=imdir+"/gradmethtest")
+    cval_prev, dval_prev = opt_cd
     print("Qopt, opt_cd:\t\t", Qopt, opt_cd)
-
 
 
 
