@@ -653,9 +653,10 @@ def save3Dim_png(Xgrid, Ygrid, Zdata, savedir, fname, dataplttype='scatter',
     ax.set_xlabel(xtag, fontsize=20), ax.set_ylabel(ytag, fontsize=20)
     ax.set_zlabel(ztag, fontsize=20)
     if not title == None:
-        plt.title(title, fontsize=24)
+        ax.set_title(title, fontsize=24)
+    
     plt.savefig(savedir + '/' + fname + ".png")
-    plt.show()
+    # plt.show()
     plt.close()   
     
     
@@ -1140,7 +1141,9 @@ def interp(data, new_Nx, new_Ny):
 def offsetopt_well(ims, dxrange, dyrange, center, R, 
                    saveims=False, pltsavedir=None, imsavedir=None):
        
-    
+    # Create the save directories
+    createdir(pltsavedir), createdir(imsavedir)
+        
     # Initialize array to store the normalized flux differences of the evaluated star corresponding to certain offsets in x and y
     offset_arr = np.zeros([len(dyrange),len(dxrange)])
     # Initialize lists
@@ -1161,7 +1164,6 @@ def offsetopt_well(ims, dxrange, dyrange, center, R,
             plt.show()
             plt.close()
             '''
-            
             
             # Determine normalized flux
             [F,_,_], [_,_,_] = apersum_old(interim, center[0], center[1], 
@@ -1229,10 +1231,12 @@ def offsetopt_well(ims, dxrange, dyrange, center, R,
     '''# Diagnostic plot    
     
     
+    
     '''
     var = [5,5,5,10,10,5] # Allowed sigma's for x0, y0, z0, sigx, sigy and A
-    if ( np.diag(pcov_gauss) == var[i] for i in range(len(var)) ):
+    if ( np.sum([np.diag(pcov_gauss) >= var[i] for i in range(len(var))]) >= 1 ):
         print("\nPossible problem in fit!\n")
+        print("\nVariances:\t", np.diag(pcov_gauss))
         fig = plt.figure()
         ax = fig.gca(projection='3d')
         fitdat = ax.plot_surface(dxgrid, dygrid, fitgauss2d, cmap='coolwarm', 
@@ -1269,15 +1273,15 @@ def offsetopt_well(ims, dxrange, dyrange, center, R,
         save3Dim_png(dxgrid, dygrid, offset_arr, pltsavedir, 
                      "offsetwellGauss3D_optdx{}dy{}".format(offsetopt_fitgauss[0],
                                                          offsetopt_fitgauss[1]), 
-                     fit=True, fitZdata=fitgauss2d, xtag=r"$\delta_X$", ytag=r"$\delta_Y$",
-                     ztag=r"$\left( (O-E)/(O+E) \right)^2$")
+                     fit=True, fitXgrid=dxgrid, fitYgrid=dygrid, fitZdata=fitgauss2d, 
+                     xtag=r"$\delta_X$", ytag=r"$\delta_Y$", ztag=r"$\left( (O-E)/(O+E) \right)^2$")
         
         # Save Gaussian finalim to fits file
         savefits(finalim_gauss, imsavedir, "O-E_dx{}dy{}".format(offsetopt_fitgauss[0],
                                                                  offsetopt_fitgauss[1]))
     
     return(offsetopt_fitgauss, offset_arr, finalim_gauss)
-
+    
     
 
 
@@ -1557,7 +1561,7 @@ r_range = np.arange(1, 16) #[pixels]
 pixscale = 0.126 #[arcsec/pixel]
 # Boolean variable for switchin on polarization computations of selected stars
 compute_anew = False
-calc_well, calc_cd = False, False
+calc_well, calc_cd = True, True
 
 
 
@@ -1622,336 +1626,367 @@ optpixoffsets, wells, interpslits = [], [], []
 R, anRmin, anRmax = 6, int(1.2*6), int(2*6)
 # Lists for storing the optimal Q and c-/d-values
 Qopts, opts_cd = [], []
-cscape = np.tile(np.nan, np.array(Mbias.shape))
-dscape = np.tile(np.nan, np.array(Mbias.shape))
 
-'''
+
+
+
+
 # Compute the offset wells for all stars within all exposures of all templates
 # Iterate over all objects (Vela1_95, WD1615_154, NGC4696)
-for i, objdir in enumerate([std_dirs[0], std_dirs[1], scidatadir]):
+wells_ijkl, offs_ijkl = [], []
+Qopt_ijkl, optcd_ijkl = [], []
+cscape_ijkl, dscape_ijkl = [], []
+for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
     print("OBJECT:\t", objdir.split("/")[-2])
-    if objdir.split("/")[-2] == "":
+    
+    # Select slits and starlist corresponding to current object
+    slits, star_lst = slits_lst[i], star_lsts[i]
     
     # Create list with templates
-    tpl_dirlst, tpl_flst = mk_lsts(obj_dir)
+    tpl_dirlst, tpl_flst = mk_lsts(objdir)
     tpl_dirlst = np.sort(tpl_dirlst)
     
     
-    # Iterate over all templates
-    for j, tpl_name in enumerate(tpl_dirlst):
-        print("\tTPL:\t", tpl_name)
-                        
-        # Create a list with filenames of files stored within tpldir
-        expdir_lst, expfile_lst = mk_lsts(tpl_dir)
-        expfile_lst = np.sort(expfile_lst)
-        
-        # Skip non-usable templates (non-usable templates should be put in a folder "skipped" or an equivalent directory which doesn't start with the string "tpl") or incomplete templates.
-        if (len(expfile_lst != 4) or
-            (objdir.split("/")[-2] == "Vela1_95" and tpl_name in ["tpl1", "tpl2", "tpl3"]) or
-            (objdir.split("/")[-2] == "NGC4696,IPOL" and tpl_name == "tpl5")): #TODO INCLUDE TPL5
-            print("\t skipped"))
-            continue
-'''
-    
-    
-for k, [fname, slits, star_lst] in enumerate(zip(fnames, slits_lst, star_lsts)):
-    print("\n\t\t {}".format(fname))
-    
     # Define plot save directories
-    temp = fname.split(datadir+"/sorted/")[1]
+    temp = objdir.split(datadir+"/sorted/")[1]
     pltsavedir = plotdir +"/"+ temp.split("/")[0]
     imsavedir = imdir +"/"+ temp.split("/")[0]
     if pltsavedir.split("/")[-1] == "STD,IPOL":
         pltsavedir = plotdir +"/"+ temp.split("/")[1]
         imsavedir = imdir +"/"+ temp.split("/")[1]
     datasavedir = npsavedir+"/"+imsavedir.split("/")[-1]
-    print("\n\n{}\n\n".format(imsavedir.split("/")[-1]))
+    print("\n\n{}\n\n".format(imsavedir.split("/")[-1]))    
     
     
-    # Extract data
-    header, data = extract_data(fname)
-    # De-biasing and flat-fielding corrections
-    data = (data - Mbias) / Mflat_norm
-
-    
-    optpixoffsets_sub1, wells_sub1 = [], []
-    # DETERMINE PIXEL-WISE OFFSETS FOR ALL STARS USING OFFSETOPT_WELL
-    for starno, starpar in enumerate(star_lst):
+    # Iterate over all templates
+    wells_jkl, offs_jkl = [], []
+    Qopt_jkl, optcd_jkl = [], []
+    cscape_jkl, dscape_jkl = [], []
+    for j, tpl_name in enumerate(tpl_dirlst):
+        print("\tTPL:\t", tpl_name)
+        tpl_dir = objdir + '/' + tpl_name     
+                        
+        # Create a list with filenames of files stored within tpldir
+        expdir_lst, expfile_lst = mk_lsts(tpl_dir)
+        expfile_lst = np.sort(expfile_lst)
         
-        '''
-        # Recall offsets for NGC4696 (already determined previously)
-        if fname == testscidata:
-            # Load list with the filenames of the non-interpolated corrected slits
-            aligneddirs, alignedfiles = mk_lsts(imdir+"/offsetopt/noninterp4")
-            aligneddatadict = {}
-            # Read out the offsets for each file
-            optpixoffsets = np.zeros([32,2])
-            for f in alignedfiles:
-                print(f)
-                # Store the aligned images in a dictionary
-                header, aligneddatadict[f.split("dx")[0]] = extract_data(imdir+"/offsetopt/noninterp4/"+f)
-                # Retrieve star number
-                starno = f.split("finalim")[1][0:2]
-                try: starno = int(starno)
-                except ValueError: starno = int(starno[0])
+        # Skip non-usable templates (non-usable templates should be put in a folder "skipped" or an equivalent directory which doesn't start with the string "tpl") or incomplete templates.
+        if ((len(expfile_lst) != 4) or
+            (objdir.split("/")[-2] == "Vela1_95" and tpl_name in ["tpl1", "tpl2", "tpl3"]) or
+            (objdir.split("/")[-2] == "NGC4696,IPOL" and tpl_name == "tpl5")): #TODO INCLUDE TPL5
+            print("\t skipped")
+            continue
+        
+        
+        # Iterate over all exposures
+        wells_kl, offs_kl = [], []
+        Qopt_kl, optcd_kl = [], []
+        cscape_kl, dscape_kl = [], []
+        for k, fname in enumerate(expfile_lst):
+            print("\n\t\t {}".format(fname))
+            
+            
+            # Extract data
+            header, data = extract_data(tpl_dir +'/'+ fname)
+            # De-biasing and flat-fielding corrections
+            data = (data - Mbias) / Mflat_norm
+            
+            # Iterate over all selected stars
+            wells_l, offs_l = [], []
+            for l, starpar in enumerate(star_lst):
                 
-                # Retrieve x offset
-                temp = f.split("dx")[1][0]
-                if temp == "-": dx = int(f.split("dx")[1][0:2])
-                else: dx = int(temp)
                 
-                # Retrieve y offset
-                dy = int(f.split("dy")[1][0:2])
-                optpixoffsets[starno-1] = [dx,dy]   
-            savenp(optpixoffsets[0], datasavedir, "optpixoffsets")
-            break
-        ''' # TODO TODO TODO REMOVE WHEN NGC4696 has been gone through one time
-        
-        
-        
-        # Check whether to compute cdscapes
-        if calc_well == False:
-            break
-        print("\n\nComputing offset wells...")
-        print("\n\nStarno:\t\t{}".format(starno+1))
-        
-        
-        # Extract ordinary and extraordinary slit
-        slitEnr = 2*(starpar[4]-1)
-        slitE, slitO = slits[slitEnr], slits[slitEnr + 1]
-        '''
-        # Adjust shape so that O and E have equal size
-        Nx, Ny = min(slitE.shape[1], slitO.shape[1]), min(slitE.shape[0], slitO.shape[0])
-        slitE, slitO = slitE[0:Ny,0:Nx], slitO[0:Ny,0:Nx]
-        ''' #TODO REMOVE IF POSSIBLE
-        '''
-        # Determine slit interpolations
-        interpE = interp(slitE, interpf*slitE.shape[1], interpf*slitE.shape[0])
-        interpO = interp(slitO, interpf*slitO.shape[1], interpf*slitO.shape[0])
-        interpslits.append(interpE), interpslits.append(interpO)
-        '''
-        # Determine the upper and lower edges of the slits
-        upedgeE, upedgeO = upedges[slitEnr], upedges[slitEnr+1]
-        lowedgeE, lowedgeO = lowedges[slitEnr], lowedges[slitEnr+1]
-        print("Slit pair {}".format(slitEnr/2))
-        
-        
-        # Compute stellar location on O slit
-        slitOcent = find_center([starpar[0]-chip_xyranges[0][0], starpar[1]-lowedgeO],
-                                 slitO, 15)
-        
-        
-        # Diagnostic plots
-        '''
-        plt.figure()
-        plt.imshow(np.log(slitO), origin='lower')
-        plt.colorbar()
-        plt.scatter(slitOcent[0], slitOcent[1], c='k', s=50)
-        plt.scatter(starpar[0]-chip_xyranges[0][0], starpar[1]-lowedgeO, c='k', s=50)
-        plt.show()
-        plt.close()
-        '''# IS OK #TODO POSSIBLY REMOVE
-        
-        
-        # Compute wells for original slits
-        offsetopt, well, alignedim_well = offsetopt_well([slitE,slitO], dxrange, dyrange, 
-                                                slitOcent, R, saveims=True, 
-                                                pltsavedir=pltsavedir+"/star{}".format(starno+1),
-                                                imsavedir=imsavedir+"/star{}".format(starno+1))
-        optpixoffsets_sub1.append(offsetopt), wells_sub1.append(well)
-        
-        
-        '''
-        plt.figure()
-        plt.imshow(alignedim_well, origin='lower')
-        plt.colorbar()
-        plt.scatter(slitOcent[0], slitOcent[1], c='k', s=50)
-        plt.show()
-        plt.close()
-        '''
+                # Load the pixel-accurate offsets if available
+                if os.path.exists(datasavedir+"/tpl{}/exp{}".format(j+1,k+1) + 
+                                     "/optpixoffsets_i{}j{}k{}.npy".format(i+1,j+1,k+1)):
+                    
+                    direc = datasavedir+"/tpl{}/exp{}".format(j+1,k+1)
+                    offs_l = np.load(direc + "/optpixoffsets_i{}j{}k{}.npy".format(i+1,j+1,k+1))
+                    wells_l = np.load(direc + "/wells_i{}j{}k{}.npy".format(i+1,j+1,k+1))
+                    print("\n\t\t\t\tOffsets and wells loaded!\n")
+                                      
+                    # shutil.rmtree(direc)
+                    break
+                
+                
+                
+                # Check whether to compute cdscapes
+                if calc_well == False:
+                    break
+                print("\n\nComputing offset wells...")
+                print("\n\nStarno:\t\t{}".format(l+1))
+                
+                
+                # Extract ordinary and extraordinary slit
+                slitEnr = 2*(starpar[4]-1)
+                slitE, slitO = slits[slitEnr], slits[slitEnr + 1]
+                '''
+                # Adjust shape so that O and E have equal size
+                Nx, Ny = min(slitE.shape[1], slitO.shape[1]), min(slitE.shape[0], slitO.shape[0])
+                slitE, slitO = slitE[0:Ny,0:Nx], slitO[0:Ny,0:Nx]
+                ''' #TODO REMOVE IF POSSIBLE
+                '''
+                # Determine slit interpolations
+                interpE = interp(slitE, interpf*slitE.shape[1], interpf*slitE.shape[0])
+                interpO = interp(slitO, interpf*slitO.shape[1], interpf*slitO.shape[0])
+                interpslits.append(interpE), interpslits.append(interpO)
+                '''
+                # Determine the upper and lower edges of the slits
+                upedgeE, upedgeO = upedges[slitEnr], upedges[slitEnr+1]
+                lowedgeE, lowedgeO = lowedges[slitEnr], lowedges[slitEnr+1]
+                print("Slit pair {}".format(slitEnr/2))
+                
+                
+                # Compute stellar location on O slit
+                slitOcent = find_center([starpar[0]-chip_xyranges[0][0], starpar[1]-lowedgeO],
+                                         slitO, 15)
+                
+                
+                # Diagnostic plots
+                '''
+                plt.figure()
+                plt.imshow(np.log(slitO), origin='lower')
+                plt.colorbar()
+                plt.scatter(slitOcent[0], slitOcent[1], c='k', s=50)
+                plt.scatter(starpar[0]-chip_xyranges[0][0], starpar[1]-lowedgeO, c='k', s=50)
+                plt.show()
+                plt.close()
+                '''# IS OK #TODO POSSIBLY REMOVE
+                
+                
+                # Compute wells for original slits
+                offsetopt, well, alignedim_well = offsetopt_well([slitE,slitO], dxrange, dyrange, 
+                                                                 slitOcent, R, saveims=True, 
+                                    pltsavedir=pltsavedir+"/tpl{}/exp{}/star{}".format(j+1,k+1,l+1),
+                                    imsavedir=imsavedir+"/tpl{}/exp{}/star{}".format(j+1,k+1,l+1))   
+                offs_l.append(offsetopt), wells_l.append(well)
+            
+            
+            
+            
+            
+            # DETERMINE C- AND D-VALUES OF ALL STARS
+            Qopt_l, optcd_l = [], []
+            cscape = np.tile(np.nan, np.array(Mbias.shape))
+            dscape = np.tile(np.nan, np.array(Mbias.shape))
+            for l, starpar in enumerate(star_lst):
+                
+                
+                # Check whether to compute cdscapes
+                if calc_cd == False:
+                    break
+                print("\n\t\t\tComputing c- and d-scapes...")
+                print("\n\t\t\tStarno:\t\t{}".format(l+1))
+                # Define aperture and anulus radii
+                R, anRmin, anRmax = starpar[3], 1.2*starpar[3], 2*starpar[3]        
+                
+                
+                # Load c- and d-scapes and corresponding data if available
+                if os.path.exists(datasavedir+"/tpl{}/exp{}".format(j+1,k+1) + 
+                                  "/cscape_i{}j{}k{}.npy".format(i+1,j+1,k+1)):
+                                  
+                    direc = datasavedir+"/tpl{}/exp{}".format(j+1,k+1)
+                    Qopt_l = np.load(direc + "/Qopt{}j{}k{}.npy".format(i+1,j+1,k+1))
+                    optcd_l = np.load(direc + "/optoffs_i{}j{}k{}.npy".format(i+1,j+1,k+1))
+                    cscape = np.load(direc + "/cscape_i{}j{}k{}.npy".format(i+1,j+1,k+1))
+                    dscape = np.load(direc + "/dscape_i{}j{}k{}.npy".format(i+1,j+1,k+1))
+                    print("\n\t\t\t\tC- and d-scape loaded!\n")
+                                     
+                    # shutil.rmtree(direc)
+                    break
+                
+                
+                # Load the pixel-accurate offsets
+                if calc_well == False:
+                    offs_l = np.load(datasavedir+"/tpl{}/exp{}".format(j,k) + 
+                                     "/optpixoffsets_i{}j{}k{}".format(i,j,k))
+                    #wells = np.load(datasavedir+"/wells_{}.npy".format(datasavedir.split("/")[-1]))
+                
+                
+                # Extract ordinary and extraordinary slit
+                slitEnr = 2*(starpar[4]-1)
+                slitE, slitO = slits[slitEnr], slits[slitEnr + 1]
+                '''
+                # Adjust shape so that O and E have equal size
+                Nx, Ny = min(slitE.shape[1], slitO.shape[1]), min(slitE.shape[0], slitO.shape[0])
+                slitE, slitO = slitE[0:Ny,0:Nx], slitO[0:Ny,0:Nx]
+                ''' #TODO REMOVE IF POSSIBLE
+                '''
+                # Determine slit interpolations
+                interpE = interp(slitE, interpf*slitE.shape[1], interpf*slitE.shape[0])
+                interpO = interp(slitO, interpf*slitO.shape[1], interpf*slitO.shape[0])
+                interpslits.append(interpE), interpslits.append(interpO)
+                '''
+                # Determine the upper and lower edges of the slits
+                upedgeE, upedgeO = upedges[slitEnr], upedges[slitEnr+1]
+                lowedgeE, lowedgeO = lowedges[slitEnr], lowedges[slitEnr+1]
+                print("Slit pair {}".format(slitEnr/2))
+                
+                    
+                
+                # Compute stellar location on O slit and on the template appended slit
+                slitOcent = find_center([starpar[0]-chip_xyranges[0][0], starpar[1]-lowedgeO],
+                                         slitO, 15)
+                dataOcent = find_center([starpar[0], starpar[1]],
+                                         data, 15)
+                
+                '''
+                appendedOcent = find_center([slitOcent[0], 
+                                             slitOcent[1]+np.sum(slitwidths[[m for m in np.arange(0,n)]])],
+                                             aligntemp, 25) #TODO SAVE TO NP FILE
+                print("appendedOcent:\t\t", appendedOcent)
+                
+                plt.figure()
+                plt.imshow(data, origin='lower', cmap='rainbow')
+                plt.colorbar()
+                plt.scatter(appendedOcent[0], appendedOce[1], s=30, c='k')
+                plt.show()
+                plt.close()
+                '''
+                
+                
+                # Create cutout
+                cutxmin, cutxmax = max(0, slitOcent[0]-35), min(slitO.shape[1]-1, slitOcent[0]+35)
+                cutymin, cutymax = max(0, slitOcent[1]-35), min(slitO.shape[0]-1, slitOcent[1]+35)
+                cutoutO = slitO[cutymin:cutymax, cutxmin:cutxmax]
+                cutoutE = slitE[cutymin:cutymax, cutxmin:cutxmax]
+                cutoutOcent = (slitOcent - np.rint([cutxmin,cutymin])).astype(int)
+                # Apply whole pixel-accuracy offset
+                framesize = 2*np.array(cutoutO.shape)
+                lowlcorn = (0.25*framesize).astype(int)
+                embedE = embed(cutoutE, framesize, offset=offs_l[l], cornerpix=lowlcorn)
+                embedO = embed(cutoutO, framesize, offset=[0,0], cornerpix=lowlcorn)
+                embedOcent = np.rint(0.25*framesize[[1,0]]).astype(int) + cutoutOcent
+                
+                
+                # Determine the background fluxes in E and O
+                backgrE, backgrEerr = ansum(embedE, embedOcent[0], embedOcent[1], 
+                                            minAn_r=anRmin, maxAn_r=anRmax)
+                backgrO, backgrOerr = ansum(embedO, embedOcent[0], embedOcent[1], 
+                                            minAn_r=anRmin, maxAn_r=anRmax)
+                # Correct the embeded images for the background flux
+                embedOcorr = embedO - backgrO[2]
+                embedEcorr = embedE - backgrE[2]
+                
+                
+                # Diagnostic plot    
+                '''
+                plt.figure()
+                plt.imshow(embedOcorr, origin='lower', cmap='rainbow')
+                plt.colorbar()
+                plt.scatter(embedOcent[0], embedOcent[1], s=30, c='k')
+                plt.show()
+                plt.close()
+                
+                plt.figure()
+                plt.imshow(embedEcorr, origin='lower', cmap='rainbow')
+                plt.colorbar()
+                plt.scatter(embedOcent[0], embedOcent[1], s=30, c='k')
+                plt.show()
+                plt.close()
+                '''
+                
+                
+                # Save O-E
+                savefits(embedOcorr-embedEcorr, imsavedir+"/tpl{}/exp{}/star{}".format(j+1,k+1,l+1), 
+                         "slitdiff_star{}".format(l+1)) 
+                savefits(cutoutO, imsavedir+"/tpl{}/exp{}/star{}".format(j+1,k+1,l+1), 
+                         "O_star{}".format(l+1))       
+                savefits(cutoutE, imsavedir+"/tpl{}/exp{}/star{}".format(j+1,k+1,l+1), 
+                         "E_star{}".format(l+1)) 
+                #TODO The allocation of the stellar center on the aligned image is OK
+                
+                
+                # Recall previous c and d values for current star
+                cval_prev, dval_prev = 0, 0
+                '''
+                dval_prev = dscape_prev[appendedOcent[1], appendedOcent[0]]
+                ''' # TODO REMOVE
+                for itno in range(5):
+                    
+                    # Define c-ranges
+                    cstart, cend = np.round([cval_prev - 2/(itno+1), cval_prev + 2/(itno+1)], 2)
+                    crange = np.linspace(cstart, cend, 49)
+                    cstep = np.round(crange[1]-crange[0], 3)
+                    print("\tcrange:\t", cstart, cend, cstep)
+                    # Define d-ranges
+                    dstart, dend = np.round([dval_prev - 2/(itno+1), dval_prev + 2/(itno+1)], 2)
+                    drange = np.linspace(dstart, dend, 49)
+                    dstep = np.round(drange[1]-drange[0], 3)
+                    print("\tdrange:\t", dstart, dend, dstep)
+                    
+                    
+                    # Compute the c and d parameters which optimize overlap using gradient method
+                    gradopt, Qopt, opt_cd = offsetopt_cd(embedOcorr, embedEcorr, crange, drange,
+                                                         embedOcent, starpar[3],
+                                                         savetofits=True, iteration=itno, 
+                                        pltsavedir=pltsavedir+"/tpl{}/exp{}/star{}".format(j+1,k+1,l+1), 
+                                        imsavedir=imsavedir+"/tpl{}/exp{}/star{}".format(j+1,k+1,l+1))
+                    cval_prev, dval_prev = opt_cd
+                    print("Qopt, opt_cd:\t\t", Qopt, opt_cd)
+                    
+                    
+                # Update c- and dscape
+                cscape[dataOcent[1],dataOcent[0]] = opt_cd[0]+offs_l[l][0]
+                dscape[dataOcent[1],dataOcent[0]] = opt_cd[1]+offs_l[l][1]
+                
+                # Append the best (i.e. last) optima parameters to stellar sublist
+                Qopt_l.append(Qopt), optcd_l.append(opt_cd)
+                
+            # Append results to exposures sublist
+            Qopt_kl.append(Qopt_l), optcd_kl.append(optcd_l)
+            offs_kl.append(offs_l), wells_kl.append(wells_l)  
+            cscape_kl.append(cscape), dscape_kl.append(dscape)         
+            # Backup1
+            if calc_well:
+                savenp(offs_l, datasavedir+"/tpl{}/exp{}".format(j+1,k+1), 
+                       "optpixoffsets_i{}j{}k{}".format(i+1,j+1,k+1))
+                savenp(wells_l, datasavedir+"/tpl{}/exp{}".format(j+1,k+1), 
+                       "wells_i{}j{}k{}".format(i+1,j+1,k+1))
+            elif calc_cd:
+                savenp(Qopt_l, datasavedir+"/tpl{}/exp{}".format(j+1,k+1), 
+                       "Qopt_i{}j{}k{}".format(i+1,j+1,k+1))
+                savenp(optcd_l, datasavedir+"/tpl{}/exp{}".format(j+1,k+1), 
+                       "optoffs_i{}j{}k{}".format(i+1,j+1,k+1))
+                savenp(cscape, datasavedir+"/tpl{}/exp{}".format(j+1,k+1), 
+                       "cscape_i{}j{}k{}".format(i+1,j+1,k+1))
+                savenp(dscape, datasavedir+"/tpl{}/exp{}".format(j+1,k+1), 
+                       "dscape_i{}j{}k{}".format(i+1,j+1,k+1))
+                       
+        # Append results to templates sublist
+        offs_jkl.append(offs_kl), wells_jkl.append(wells_kl)    
+        Qopt_jkl.append(Qopt_kl), optcd_jkl.append(optcd_kl)
+        cscape_jkl.append(cscape_kl), dscape_jkl.append(dscape_kl)   
+        # Backup2  
+        if calc_well:
+            savenp(offs_kl, datasavedir+"/tpl{}".format(j+1), 
+                   "optpixoffsets_i{}j{}".format(i+1,j+1))
+            savenp(wells_kl, datasavedir+"/tpl{}".format(j+1), 
+                   "wells_i{}j{}".format(i+1,j+1))
+        elif calc_cd:
+            savenp(Qopt_kl, datasavedir+"/tpl{}".format(j+1), 
+                   "Qopt_i{}j{}".format(i+1,j+1))
+            savenp(optcd_kl, datasavedir+"/tpl{}".format(j+1), 
+                   "optoffs_i{}j{}".format(i+1,j+1))
     
-    # Save results and append results to main list
+    # Append results to objects sublist
+    offs_ijkl.append(offs_jkl), wells_ijkl.append(wells_jkl) 
+    Qopt_ijkl.append(Qopt_jkl), optcd_ijkl.append(optcd_jkl)
+    cscape_ijkl.append(cscape_jkl), dscape_ijkl.append(dscape_jkl)  
+    # Backup2  
     if calc_well:
-        savenp(optpixoffsets_sub1, datasavedir, 
-               "optpixoffsets_{}".format(datasavedir.split("/")[-1]))
-        savenp(wells_sub1, datasavedir, "wells_{}".format(datasavedir.split("/")[-1]))
-        optpixoffsets.append(np.array(optpixoffsets_sub1))
-        wells.append(np.array(wells_sub1))
+        savenp(offs_jkl, datasavedir, "optpixoffsets_i{}".format(i))
+        savenp(wells_jkl, datasavedir, "wells_i{}".format(i))
+    elif calc_cd:
+        savenp(Qopt_jkl, datasavedir, "Qopt_i{}".format(i))
+        savenp(optcd_jkl, datasavedir, "optoffs_i{}.format(i))
     
     
     
-    # DETERMINE C- AND D-VALUES OF ALL STARS
-    Qopts_sub1, opts_cd_sub1 = [], []
-    for starno, starpar in enumerate(star_lst):
-        
-        
-        # Check whether to compute cdscapes
-        if calc_cd == False:
-            break
-        print("\n\nComputing c- and d-scapes...")
-        print("\n\nStarno:\t\t{}".format(starno+1))
-        # Define aperture and anulus radii
-        R, anRmin, anRmax = starpar[3], 1.2*starpar[3], 2*starpar[3]    
-        
-        
-        # Load the pixel-accurate offsets
-        if calc_well == False:
-            offsets = np.load(datasavedir+
-                              "/optpixoffsets_{}.npy".format(datasavedir.split("/")[-1]))
-            #wells = np.load(datasavedir+"/wells_{}.npy".format(datasavedir.split("/")[-1]))
-        else:
-            offsets = np.array(optpixoffsets_sub1)
-            #wells = np.array(wells_sub1)
-        
-        
-        # Extract ordinary and extraordinary slit
-        slitEnr = 2*(starpar[4]-1)
-        slitE, slitO = slits[slitEnr], slits[slitEnr + 1]
-        '''
-        # Adjust shape so that O and E have equal size
-        Nx, Ny = min(slitE.shape[1], slitO.shape[1]), min(slitE.shape[0], slitO.shape[0])
-        slitE, slitO = slitE[0:Ny,0:Nx], slitO[0:Ny,0:Nx]
-        ''' #TODO REMOVE IF POSSIBLE
-        '''
-        # Determine slit interpolations
-        interpE = interp(slitE, interpf*slitE.shape[1], interpf*slitE.shape[0])
-        interpO = interp(slitO, interpf*slitO.shape[1], interpf*slitO.shape[0])
-        interpslits.append(interpE), interpslits.append(interpO)
-        '''
-        # Determine the upper and lower edges of the slits
-        upedgeE, upedgeO = upedges[slitEnr], upedges[slitEnr+1]
-        lowedgeE, lowedgeO = lowedges[slitEnr], lowedges[slitEnr+1]
-        print("Slit pair {}".format(slitEnr/2))
-        
-            
-        
-        # Compute stellar location on O slit and on the template appended slit
-        slitOcent = find_center([starpar[0]-chip_xyranges[0][0], starpar[1]-lowedgeO],
-                                 slitO, 15)
-        dataOcent = find_center([starpar[0], starpar[1]],
-                                 data, 15)
-        
-        '''
-        appendedOcent = find_center([slitOcent[0], 
-                                     slitOcent[1]+np.sum(slitwidths[[m for m in np.arange(0,n)]])],
-                                     aligntemp, 25) #TODO SAVE TO NP FILE
-        print("appendedOcent:\t\t", appendedOcent)
-        
-        plt.figure()
-        plt.imshow(data, origin='lower', cmap='rainbow')
-        plt.colorbar()
-        plt.scatter(appendedOcent[0], appendedOce[1], s=30, c='k')
-        plt.show()
-        plt.close()
-        '''
-        
-        
-        # Create cutout
-        cutxmin, cutxmax = max(0, slitOcent[0]-35), min(slitO.shape[1]-1, slitOcent[0]+35)
-        cutymin, cutymax = max(0, slitOcent[1]-35), min(slitO.shape[0]-1, slitOcent[1]+35)
-        cutoutO = slitO[cutymin:cutymax, cutxmin:cutxmax]
-        cutoutE = slitE[cutymin:cutymax, cutxmin:cutxmax]
-        cutoutOcent = (slitOcent - np.rint([cutxmin,cutymin])).astype(int)
-        # Apply whole pixel-accuracy offset
-        framesize = 2*np.array(cutoutO.shape)
-        lowlcorn = (0.25*framesize).astype(int)
-        embedE = embed(cutoutE, framesize, offset=offsets[starno], cornerpix=lowlcorn)
-        embedO = embed(cutoutO, framesize, offset=[0,0], cornerpix=lowlcorn)
-        embedOcent = np.rint(0.25*framesize[[1,0]]).astype(int) + cutoutOcent
-        
-        
-        # Determine the background fluxes in E and O
-        backgrE, backgrEerr = ansum(embedE, embedOcent[0], embedOcent[1], 
-                                    minAn_r=anRmin, maxAn_r=anRmax)
-        backgrO, backgrOerr = ansum(embedO, embedOcent[0], embedOcent[1], 
-                                    minAn_r=anRmin, maxAn_r=anRmax)
-        # Correct the embeded images for the background flux
-        embedOcorr = embedO - backgrO[2]
-        embedEcorr = embedE - backgrE[2]
-        
-        
-        # Diagnostic plot    
-        '''
-        plt.figure()
-        plt.imshow(embedOcorr, origin='lower', cmap='rainbow')
-        plt.colorbar()
-        plt.scatter(embedOcent[0], embedOcent[1], s=30, c='k')
-        plt.show()
-        plt.close()
-        
-        plt.figure()
-        plt.imshow(embedEcorr, origin='lower', cmap='rainbow')
-        plt.colorbar()
-        plt.scatter(embedOcent[0], embedOcent[1], s=30, c='k')
-        plt.show()
-        plt.close()
-        '''
-        
-        
-        # Save O-E
-        savefits(embedOcorr-embedEcorr, imsavedir+"/star{}".format(starno+1), 
-                 "slitdiff_star{}".format(starno+1)) 
-        savefits(cutoutO, imsavedir+"/star{}".format(starno+1), 
-                 "O_star{}".format(starno+1))       
-        savefits(cutoutE, imsavedir+"/star{}".format(starno+1), 
-                 "E_star{}".format(starno+1)) 
-        #TODO The allocation of the stellar center on the aligned image is OK
-        
-        
-        # Recall previous c and d values for current star
-        cval_prev, dval_prev = 0, 0
-        '''
-        dval_prev = dscape_prev[appendedOcent[1], appendedOcent[0]]
-        ''' # TODO REMOVE
-        for itno in range(5):
-            
-            # Define c-ranges
-            cstart, cend = np.round([cval_prev - 2/(itno+1), cval_prev + 2/(itno+1)], 2)
-            crange = np.linspace(cstart, cend, 49)
-            cstep = np.round(crange[1]-crange[0], 3)
-            print("\tcrange:\t", cstart, cend, cstep)
-            # Define d-ranges
-            dstart, dend = np.round([dval_prev - 2/(itno+1), dval_prev + 2/(itno+1)], 2)
-            drange = np.linspace(dstart, dend, 49)
-            dstep = np.round(drange[1]-drange[0], 3)
-            print("\tdrange:\t", dstart, dend, dstep)
-            
-            
-            # Compute the c and d parameters which optimize overlap using gradient method
-            gradopt, Qopt, opt_cd = offsetopt_cd(embedOcorr, embedEcorr, crange, drange,
-                                                 embedOcent, starpar[3],
-                                                 savetofits=True, iteration=itno, 
-                                pltsavedir=pltsavedir+"/star{}".format(starno+1), 
-                                imsavedir=imsavedir+"/star{}".format(starno+1))
-            cval_prev, dval_prev = opt_cd
-            print("Qopt, opt_cd:\t\t", Qopt, opt_cd)
-            
-            
-        # Update c- and dscape
-        cscape[dataOcent[1],dataOcent[0]] = opt_cd[0]+offsets[starno][0]
-        dscape[dataOcent[1],dataOcent[0]] = opt_cd[1]+offsets[starno][1]
-        
-        # Append the best (i.e. last) optima parameters to list
-        Qopts_sub1.append(Qopt), opts_cd_sub1.append(opt_cd)
-    
-    
-    # Append results to main list
-    if calc_cd:
-        Qopts.append(np.array(Qopts_sub1))
-        opts_cd.append(np.array(opt_cd)) 
-        
 
 
-# Save the stellar pixel-accurate offsets and the stellar offset wells to np savefiles
-if calc_well:
-    savenp(wells, npsavedir, "wells")
-    savenp(optpixoffsets, npsavedir, "optpixoffsets") 
-elif calc_cd:
-    savenp(Qopts, npsavedir, "Qopts")
-    savenp(opts_cd, npsavedir, "opts_cd") 
-    savenp(cscape, npsavedir, "cscape")
-    savenp(dscape, npsavedir, "dscape")
-    
+
+
 
 
 # Determine bivariate third order polynomial fit to c- and dscapes if calc_cd==True
