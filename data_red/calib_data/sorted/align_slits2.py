@@ -1993,8 +1993,8 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
 if not calc_cd and not calc_well:
 
     # Load the c- and d-scapes
-    cscape = np.load(npsavedir+"/cscape.npy")
-    dscape = np.load(npsavedir+"/dscape.npy")
+    cscape_ijkl = np.load(npsavedir+"/cscape.npy")
+    dscape_ijkl = np.load(npsavedir+"/dscape.npy")
     
     # ARTIFICIAL POINT
     '''
