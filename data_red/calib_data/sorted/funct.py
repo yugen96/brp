@@ -120,7 +120,7 @@ def find_center(coord, data_array, window_size):
             
     
 # Function which calculates the aperture count rate for a star centered at pixel coordinates [px, py] for an aperture radius r (sky annulus subtraction not included).
-def apersum_old(image, px, py, r):
+def apersum_old(image, px, py, r, absthreshold=np.inf):
     
     
     # Determine the aperture limits
@@ -144,7 +144,8 @@ def apersum_old(image, px, py, r):
             # Store the current pixel's count value
             pixval = image[j-1,i-1]
             # Ommit nan and infinite values
-            if np.isnan(pixval) or np.isinf(pixval):
+            if np.isnan(pixval) or np.isinf(pixval) or abs(pixval) > absthreshold:
+                #print("In apersum_old: inf or nan pixel encountered!")
                 continue
             
             # Append pixval to pixvals for calculation of median
@@ -543,7 +544,8 @@ def compute_pol(F_lst, sigmaF_lst):
     temp2Phi = temp1Phi * np.sqrt(sigmaU_jqr**2 + fracUQ_jqr**2 * sigmaQ_jqr**2)
     sigmaPhi_jqr = 0.5 * np.divide(temp2Phi, Q_jqr)        
     
-    return np.array([Q_jqr, U_jqr, P_jqr, Phi_jqr]), np.array([sigmaQ_jqr, sigmaU_jqr, sigmaP_jqr, sigmaPhi_jqr])
+    return (np.array([Q_jqr, U_jqr, P_jqr, Phi_jqr]), 
+            np.array([sigmaQ_jqr, sigmaU_jqr, sigmaP_jqr, sigmaPhi_jqr]))
 
 
 
@@ -609,7 +611,7 @@ def saveim_png(data, savedir, fname, colmap='coolwarm',
         plt.scatter(scatterpoints[0], scatterpoints[1], c=scattercol)
     plt.colorbar()
     plt.xlabel(xtag, fontsize=20), plt.ylabel(ytag, fontsize=20)
-    if not title == None:
+    if not title is None:
         plt.title(title, fontsize=24)
     plt.tight_layout()
     # Create savedir       
@@ -655,7 +657,7 @@ def save3Dim_png(Xgrid, Ygrid, Zdata, savedir, fname, dataplttype='scatter',
         os.makedirs(savedir)
     ax.set_xlabel(xtag, fontsize=20), ax.set_ylabel(ytag, fontsize=20)
     ax.set_zlabel(ztag, fontsize=20)
-    if not title == None:
+    if not title is None:
         ax.set_title(title, fontsize=24)
     
     plt.savefig(savedir + '/' + fname + ".png")
@@ -767,7 +769,6 @@ def QvsU(fig, ax, QU, offsetangle=0., PLPHI=np.zeros(4), checkPphi=[False,False]
     '''
     # Plot given polarization degrees and angles
     [checkP, checkphi] = checkPphi
-    print(checkP, checkphi)
     [PL,sigmaPL,PHI,sigmaPHI] = PLPHI # [-], [deg]
     if checkP == True:
         plot_circle(ax, PL-sigmaPL, xc=0., yc=0., colour=colour) # ESO documentation inner polarization circle
@@ -934,7 +935,6 @@ def embed(data, frameshape, offset=np.zeros(2,dtype=int), cornerpix=[0,0]):
     
     # Determine data shape
     nrow_dat, ncol_dat = data.shape
-    
     # Embed the data array in the frame, using the specified offset. NOTE: x=columns and y=rows!
     frame[cornerpix[0]+offset[1]:cornerpix[0]+offset[1]+nrow_dat, 
           cornerpix[1]+offset[0]:cornerpix[1]+offset[0]+ncol_dat] = data
@@ -955,7 +955,7 @@ def mask2d(data, mask, fillshape=None, compute_uplcorn=False):
     for rowno, row in enumerate(flatmasked):
         possrow = list(row)
         if len(possrow) != 0:
-            if fillshape == None:
+            if fillshape is None:
                 lst2d.append(possrow)
             # Fill up each row in order to create an array with shape fillshape
             if fillshape != None:
@@ -963,7 +963,7 @@ def mask2d(data, mask, fillshape=None, compute_uplcorn=False):
                 temprow[0:len(possrow)] = possrow
                 lst2d.append(temprow)
             # Determine the index of the first row containing a True value
-            if compute_uplcorn and (firstrow == None):
+            if compute_uplcorn and (firstrow is None):
                 firstrow = rowno
 
                 
@@ -992,7 +992,7 @@ def align_slits(slits, pixoffs=None, detoffs=False):
     # Initiate minimum slit shape parameters
     minNx, minNy = slits[0].shape[1], slits[0].shape[0]
     # Initiate pixoffs
-    if pixoffs == None:
+    if pixoffs is None:
         pixoffs= np.zeros((nrofslits/2, 2))
     # print("pixoffs: {}".format(pixoffs)) #TODO Uncomment
     
@@ -1170,6 +1170,7 @@ def offsetopt_well(ims, dxrange, dyrange, center, R,
             plt.figure()
             plt.imshow(interim, origin='lower', vmin=0., vmax=0.2)
             plt.colorbar()
+            plt.scatter(center[0], center[1], c='k', s=50)
             plt.show()
             plt.close()
             '''
@@ -1177,7 +1178,6 @@ def offsetopt_well(ims, dxrange, dyrange, center, R,
             # Determine normalized flux
             [F,_,_], [_,_,_] = apersum_old(interim, center[0], center[1], 
                                            int(np.sqrt(np.max(dxrange)**2 + np.max(dyrange)**2)))
-            
             '''
             if F < 0:
                 plt.figure()
@@ -1193,7 +1193,7 @@ def offsetopt_well(ims, dxrange, dyrange, center, R,
     
     '''
     plt.figure()
-    plt.imshow(offset_arr, origin='lower')
+    plt.imshow(offset_arr, origin='lower', vmax=1e5)
     plt.colorbar()
     plt.show()
     plt.close()
@@ -1474,6 +1474,7 @@ def polyval2d(x, y, m):
 
 # Different function for aligning O and E, which shifts each pixel individually
 # The two slits and pixoffs are assumed to have the same shape!
+#TODO DOESN'T SEEM TO WORK LIKE WE WANT IT TO. USE MEDIAN WHOLE-PIXEL OFFSET OVER ENTIRE SLIT INSTEAD
 def align_slits2(slits, pixoffs):
     
     # Extract O and E
@@ -1481,40 +1482,45 @@ def align_slits2(slits, pixoffs):
     slitshape = np.array(O.shape)
     # Extract x- and y-offsets
     pixoffsx, pixoffsy = pixoffs
-    print("DEBUG:\t\t", pixoffsx, pixoffsy)
+    #print("DEBUG:\t\t", pixoffsx, pixoffsy)
     
     # Perform pixel-by-pixel offset of E w.r.t. O
     Eoffs = np.tile(np.nan, 2*slitshape)
-    uplcorn = (0.5*slitshape).astype(int)
+    lowlcorn = (0.25*slitshape).astype(int)
     for x in range(O.shape[1]):
         for y in range(O.shape[0]):
         
             # Extract current pixel's offsets
-            
             pixeloffx, pixeloffy = pixoffsx[y,x], pixoffsy[y,x]
             if np.isnan(pixeloffx):
                 pixeloffx = 0
             if np.isnan(pixeloffy):
                 pixeloffy = 0
-            Eoffs[uplcorn[0]+y+int(pixeloffx), uplcorn[1]+x+int(pixeloffy)] = E[y,x]
             
-        
-    # Diagnostic plot
-    '''
-    plt.imshow(Eoffs, origin='lower', cmap='afmhot')
-    plt.colorbar()
-    #plt.show()
-    plt.close()
-    '''
+            if x == 301 and y == 21:
+                print("DEEEEEEEEEEEBUUUUUUUUUG:\t{},{}".format(pixeloffx, pixeloffy))    
+                
+            Eoffs[lowlcorn[0]+y+int(pixeloffx), lowlcorn[1]+x+int(pixeloffy)] = E[y,x]
+            
+    
     
     # Determine the normalized flux difference
-    frameO = embed(O, (2*slitshape).astype(int), cornerpix=uplcorn)
+    frameO = embed(O, 2*slitshape, cornerpix=lowlcorn)
+    
+    # Diagnostic plot
+    plt.imshow(frameO-Eoffs, origin='lower', cmap='afmhot', vmin=-1, vmax=1)
+    plt.colorbar()
+    plt.show()
+    plt.close()    
+    
     slitdiff = frameO - Eoffs
     slitsum = frameO + Eoffs
     cal_frame = slitdiff / slitsum
     
     # Crop to overlapping region
-    overlmask = ~np.isnan(frameO*Eoffs)    
+    overlmask = ~np.isnan(frameO*Eoffs)   
+    slitdiff_crop =  mask2d(slitdiff, overlmask, fillshape=slitshape)
+    slitsum_crop = mask2d(slitsum, overlmask, fillshape=slitshape)
     cal_slit = mask2d(cal_frame, overlmask, fillshape=slitshape)
     
     # Diagnostic plot
@@ -1525,13 +1531,13 @@ def align_slits2(slits, pixoffs):
     plt.close()
     '''
     
-    return cal_slit
+    return slitdiff_crop, slitsum_crop, cal_slit
     
 
 
 
 # Function for aligning a slitpair, using predetermined offset interpolations    
-def detslitdiffnorm(slitpair, offs_i, savefigs=False, plotdirec=None, slitNR=None):
+def detslitdiffnorm(slitpair, offs_i, savefigs=False, plotdirec=None, imdirec=None, suffix=None):
 
     # Extract O and E from slitpair
     E, O = slitpair
@@ -1560,19 +1566,21 @@ def detslitdiffnorm(slitpair, offs_i, savefigs=False, plotdirec=None, slitNR=Non
     
     
     # Determine piecewise whole-pixel offsets
-    offsfactx, offsfacty = np.rint(offsx_i), np.rint(offsy_i)
+    offsfactx = int(np.nanmedian(np.rint(offsx_i)[0]))
+    offsfacty = int(np.nanmedian(np.rint(offsy_i)[1]))
     # Determine piecewise gradient subtraction factors
     gradfactx_i, gradfacty_i = offsx_i % 1, offsy_i % 1
-    print("\t\t\tmed_xgrad:\t{}\n\t\t\tmed_ygrad:\t{}\n".format(
-                                                       np.nanmedian(gradfactx_i), 
-                                                       np.nanmedian(gradfacty_i)))
-    
     
     # Align the slits using the median whole-pixel offset
-    '''
-    O_E = align_slits([E,O], [[offsfactx, offsfacty]], detoffs=False)
-    '''
-    O_E = align_slits2([E,O], [offsfactx, offsfacty])
+    framesize = 2*np.array(O.shape)
+    lowlcorn = (0.25*framesize).astype(int)
+    Oembed = polfun.embed(O, framesize, cornerpix=lowlcorn)
+    Eembed = polfun.embed(E, framesize, offset=[offsfactx,offsfacty], cornerpix=lowlcorn)
+    O_E = (Oembed - Eembed)[lowlcorn[0]:lowlcorn[0]+O.shape[0],
+                            lowlcorn[1]:lowlcorn[1]+O.shape[1]]       
+    OplusE = (Oembed + Eembed)[lowlcorn[0]:lowlcorn[0]+O.shape[0],
+                               lowlcorn[1]:lowlcorn[1]+O.shape[1]]   
+    
     # Determine new y-limits
     Ny, Nx = O_E.shape
     # Determine minimal y-shapes
@@ -1597,8 +1605,8 @@ def detslitdiffnorm(slitpair, offs_i, savefigs=False, plotdirec=None, slitNR=Non
         plotxcent = np.median(range(O_E.shape[1]))
         O_Eplot = ax.imshow(O_E, origin='lower', cmap='afmhot', 
                             extent=[.126*(0-plotxcent), .126*(O_E.shape[1]-plotxcent),
-                                    0, 0.126*(O_E.shape[0])])
-                            #vmin=-2e3, vmax=2e3)
+                                    0, 0.126*(O_E.shape[0])], 
+                            vmin=-1, vmax=1)
         start, end = ax.get_ylim()
         ax.yaxis.set_ticks(np.linspace(start, end, 3))
         divider = make_axes_locatable(ax)
@@ -1610,8 +1618,8 @@ def detslitdiffnorm(slitpair, offs_i, savefigs=False, plotdirec=None, slitNR=Non
         ax.set_xlabel(r"X [arcsec]", fontsize=20)
         ax.set_ylabel(r"Y [arcsec]", fontsize=20)
         ax.set_title(r"O - E", fontsize=26)
-        plt.savefig(plotdirec+"/O-E_slit{}.png".format(slitNR))
-        plt.show()
+        plt.savefig(plotdirec+"/O-E{}.png".format(suffix))
+        #plt.show()
         plt.close()   
         
         f, ax = plt.subplots()
@@ -1631,14 +1639,126 @@ def detslitdiffnorm(slitpair, offs_i, savefigs=False, plotdirec=None, slitNR=Non
         ax.set_xlabel(r"X [arcsec]", fontsize=20)
         ax.set_ylabel(r"Y [arcsec]", fontsize=20)
         ax.set_title(r"O - E - grad.", fontsize=26)
-        plt.savefig(plotdirec+"/O-E-grad_slit{}.png".format(slitNR))
-        plt.show()
-        plt.close()    
+        plt.savefig(plotdirec+"/O-E-grad{}.png".format(suffix))
+        #plt.show()
+        plt.close()  
+        
+        # Save to fits files
+        savefits(O_E, imdirec, "O-E{}".format(suffix))
+        savefits(OplusE, imdirec, "O+E{}".format(suffix))  
+        savefits(O_E_grad, imdirec, "O-E-grad{}".format(suffix)) 
+    
+    return [O_E, OplusE, O_E_grad]
     
     
-    return O_E_grad, O_E
 
+# Function for determining linear Stokes parameters and polarization degrees and angles
+# in each pixel of a given set of slits slitdiffnorm_lst 
+# (containing 4 exposures with different retarder angles: 0, 22.5, 45 and 67.5 degree)
+def detpol(slitdiffnorm_lst, S_N, offsxy0__45=np.zeros(2), offsxy22_5__67_5=np.zeros(2), corran=0.):
+    
+    # Extract different retangle exposures
+    [slitdiffnorm0, slitdiffnorm22_5,
+     slitdiffnorm45, slitdiffnorm67_5] = slitdiffnorm_lst
+    # Align exposures
+    slitshape = slitdiffnorm0.shape
+    print("DEBUG in detpol slitshape = {}".format(slitshape))
+    framesize = 2*np.array(slitshape)
+    lowlcorn = (0.25*framesize).astype(int)
+    if np.sum(offsxy0__45 != np.zeros(2)) != 0:
+        slitdiffnorm0 = embed(slitdiffnorm0, framesize, offset=offsxy0__45, cornerpix=lowlcorn)
+        slitdiffnorm45 = embed(slitdiffnorm45, framesize, cornerpix=lowlcorn)
+    if np.sum(offsxy22_5__67_5 != np.zeros(2)) != 0:
+        slitdiffnorm22_5 = embed(slitdiffnorm22_5, framesize, 
+                                 offset=offsxy22_5__67_5, cornerpix=lowlcorn)
+        slitdiffnorm67_5 = embed(slitdiffnorm67_5, framesize, cornerpix=lowlcorn)
+        
+    # Compute double differences
+    Q_norm = 0.5*slitdiffnorm0 - 0.5*slitdiffnorm45
+    U_norm = 0.5*slitdiffnorm22_5 - 0.5*slitdiffnorm67_5    
+    if np.sum(offsxy0__45 != np.zeros(2)) != 0:
+        Q_norm = Q_norm[lowlcorn[0]:lowlcorn[0]+slitshape[0],
+                        lowlcorn[1]:lowlcorn[1]+slitshape[1]]
+    if np.sum(offsxy22_5__67_5 != np.zeros(2)) != 0:
+        U_norm = U_norm[lowlcorn[0]:lowlcorn[0]+slitshape[0],
+                        lowlcorn[1]:lowlcorn[1]+slitshape[1]]
+    
+                     
+    # Diagnostic plot (check exposure alignment)
+    plt.imshow(U_norm - Q_norm, origin='lower', vmin=-1, vmax=1)
+    plt.colorbar()
+    #plt.show()
+    plt.close()
+    
+    
+    # Determine degree and angle of linear polarization
+    pL = np.sqrt(U_norm**2 + Q_norm**2)
+    phiL = 0.5 * np.arctan(U_norm/Q_norm) #radians
+    phiL_DEG = (180/np.pi)*phiL + corran #deg
+    
+    # Determine error margins (see Bagnulo 2009 appendix formulae A14 and A15)
+    sigmaQ_norm = (1/(2*np.sqrt(len(slitdiffnorm_lst))) / S_N)
+    sigmaU_norm = (1/(2*np.sqrt(len(slitdiffnorm_lst))) / S_N)
+    sigma_pL = np.sqrt( (np.cos(2*phiL))**2 * sigmaQ_norm**2 + 
+                        (np.sin(2*phiL))**2 * sigmaU_norm**2 )
+    temp = np.sqrt( (np.sin(2*phiL))**2 * sigmaQ_norm**2 + 
+                    (np.cos(2*phiL))**2 * sigmaU_norm**2 ) #NOTE: different from sigma_pL
+    sigma_phiL = 1./2. * ( temp / pL ) #rad
+    sigma_phiL_DEG = (180./np.pi) * sigma_phiL #deg
+    
+    return([U_norm, Q_norm, pL, phiL_DEG], [sigmaQ_norm, sigmaU_norm, sigma_pL, sigma_phiL_DEG])
 
+    
+'''
+# Function for selecting a rotated rectangular region from an array
+def selrotrect(data, boxcent, boxsizs, theta):
+    
+    # Compute the non-rotated box corners
+    lowlcorn0, lowrcorn0 = boxcent - 0.5*boxsizs, boxcent - np.array([1,-1]) * boxsizs
+    uprcorn0, uprcorn0 = boxcent + 0.5*boxsizs, boxcent - np.array([-1,1]) * boxsizs
+    
+    # Rotate the box angles
+    corn_rotlst = []
+    rotmatrix = np.array([[np.cos(theta),-np.sin(theta)],[np.sin(theta),np.cos(theta)]])
+    for corn in [lowlcorn0, lowrcorn0, uprcorn0, uplcorn0]:
+        corn_rot = np.matmul(rotmatrix,corn)
+        corn_rotlst.append(corn_rot)
+    
+    # Define boundaries
+    xmax 
+'''    
+        
+        
+
+def selrotrect(data, boxcents, boxsizs, theta):
+    
+    # Determine data shape
+    datashape = np.array(data.shape)
+    # Set framesize and lower left corner of embeded array
+    framesize = np.array(2*[np.max(datashape)])
+    lowlcorn = (0.25*framesize).astype(int)
+    
+    # Embed the data in a larger array
+    dataemb = embed(data, framesize, cornerpix=lowlcorn)
+    
+    # Rotate the pixels
+    rotmatrix = np.array([[np.cos(-theta),-np.sin(-theta)],[np.sin(-theta),np.cos(-theta)]])
+    for coord in np.argwhere(~np.isnan(dataemb))
+    
+    
+    '''
+    # Rotate each pixel
+    for rowno in np.arange(lowlcorn[0]:lowlcorn[0]+data.shape[0]):
+        for colno in np.arange(lowlcorn[1]:lowlcorn[1]+data.shape[1]):
+            
+            # Determine the row and column numbers respective to the box center
+            rownoresp, colnoresp = rowno - boxcents[0], colno - boxcents[1]
+            # Rotate the pixels
+            newrownoresp = colnoresp*np.cos(theta) - rownoresp*np.sin(theta)
+            newcolnoresp = colnoresp*np.sin(theta) + rownoresp*np.cos(theta)
+            dataemb[rowno+newrowno,colno+newcolno] = dataemb[rowno,colno]
+    '''
+            
 
 #################### END FUNCTIONS FOR SLIT APPENDAGE ####################
 #################### END FUNCTIONS #############################################

@@ -170,8 +170,8 @@ def compute_fluxlsts(std_dirs, bias, masterflat_norm, loc_lsts, r_range):
             
             # Skip non-usable templates (non-usable templates should be put in a folder "skipped" or an equivalent directory which doesn't start with the string "tpl") or incomplete templates.
             if ((std_dir.split("/")[-2] == "Vela1_95" and tpl_name in ["tpl1", "tpl2", "tpl3"])
-                or len(expfile_lst != 4)):
-                print("\t skipped"))
+            or len(expfile_lst != 4)):
+                print("\t skipped")
                 continue 
                         
             
@@ -329,7 +329,7 @@ def compute_pol(F_lst, sigmaF_lst):
     # Compute standard deviations
     sigmaQ_jqr = 0.5 * np.sqrt(sigmaF_lst[:,0,:,:]**2 + sigmaF_lst[:,2,:,:]**2)
     sigmaU_jqr = 0.5 * np.sqrt(sigmaF_lst[:,1,:,:]**2 + sigmaF_lst[:,3,:,:]**2)
-
+    
     # Compute degree of linear polarization and polarization angle
     fracUQ_jqr = np.divide(U_jqr, Q_jqr) # --
     P_jqr = np.sqrt(Q_jqr**2 + U_jqr**2) # --
@@ -340,9 +340,10 @@ def compute_pol(F_lst, sigmaF_lst):
     # Compute standard deviation on angle of linear polarization
     temp1Phi = 1. / (np.ones(fracUQ_jqr.shape) + fracUQ_jqr)
     temp2Phi = temp1Phi * np.sqrt(sigmaU_jqr**2 + fracUQ_jqr**2 * sigmaQ_jqr**2)
-    sigmaPhi_jqr = 0.5 * np.divide(temp2Phi, Q_jqr)        
+    sigmaPhi_jqr = 0.5 * np.divide(temp2Phi, Q_jqr)
     
-    return np.array([Q_jqr, U_jqr, P_jqr, Phi_jqr]), np.array([sigmaQ_jqr, sigmaU_jqr, sigmaP_jqr, sigmaPhi_jqr])
+    return np.array([Q_jqr, U_jqr, P_jqr, Phi_jqr]), np.array([sigmaQ_jqr, sigmaU_jqr, 
+                                                               sigmaP_jqr, sigmaPhi_jqr])
 
 
 
@@ -497,6 +498,14 @@ def QvsU(fig, ax, QU, offsetangle=0., PLPHI=np.zeros(4), checkPphi=[False,False]
         inset_ax.xaxis.get_major_locator().set_params(nbins=1)
         # draw a bbox of the region of the inset axes in the parent axes and connecting lines between the bbox and the inset axes area
         mark_inset(ax, inset_ax, loc1=2, loc2=4, fc="none", ec="0.7")
+    
+    
+    # Addition 26-06-17: Compute difference angle between corrected and non-corrected
+    if PHI not is None:
+        phiL_uncorr, phiL_corr = 0.5*np.arctan(U/Q), 0.5*np.arctan(Ucorr/Qcorr) #rad
+        phiLdiff = PHI - (180./np.pi)*phiL_corr #deg
+        print("26-06-17:\t phiL_corrEXTRA = {}".format(phiLdiff))
+    
         
         
         
@@ -565,6 +574,7 @@ def text_plotter(x_data, y_data, text_positions, axis,txt_width,txt_height):
 datadir = "/home/bjung/Documents/Leiden_University/brp/data_red/calib_data"
 stddatadir = datadir + "/sorted/STD,IPOL"
 plotdir = "/home/bjung/Documents/Leiden_University/brp/data_red/plots"
+npsavedir = "/home/bjung/Documents/Leiden_University/brp/data_red/npsaves"
 # Create list of directories and files within veladir
 std_dirs = [stddatadir + "/Vela1_95/CHIP1", stddatadir + "/WD1615_154/CHIP1"]
 
@@ -573,7 +583,7 @@ bias_header, bias = extract_data(datadir + "/masterbias.fits")
 mflat_normheader, mflat_norm = extract_data(datadir + "/masterflats/masterflat_norm_FLAT,LAM_IPOL_CHIP1.fits")
 
 # Boolean variable 
-compute_anew = True
+compute_anew = False
 
 # Pixel scale (same for all exposures)
 pixscale = 0.126 #[arcsec/pixel]
@@ -614,7 +624,7 @@ if compute_anew == True:
 for i, std_dir in enumerate(std_dirs):
     print(std_dir.split("/")[-2])
     
-    loaddir = std_dir.rsplit("/",2)[0] + "/loadfiles/" + std_dir.rsplit("/",2)[1]
+    loaddir = npsavedir +'/'+ std_dir.rsplit("/",2)[1] + "/fluxlsts"
     regions = np.array(star_lsts[i])
     ESO_BV_PlPhi, ESO_BV_sigmaPlPhi = ESObvPLPHI[i], sigmaESObvPLPHI[i]
     
@@ -645,6 +655,8 @@ for i, std_dir in enumerate(std_dirs):
         
     # Compute Stokes Q and U as well as the linear polarization degree and angle and all corresponding error margins
     QUPphi_jqr, sigmaQUPphi_jqr = compute_pol(OEF_jkqr[2], sigmaOEF_jkqr[2])
+    
+        
     # Select correct aperture radii for each region
     QUPphi_jq = np.array([ jkqr[:,reg_ind,rad_ind] for jkqr in QUPphi_jqr])
     sigmaQUPphi_jq = np.array([ sigma_jq[:,reg_ind,rad_ind] for sigma_jq in sigmaQUPphi_jqr])
@@ -683,7 +695,6 @@ for i, std_dir in enumerate(std_dirs):
             continue 
         j = J-skips
         print("Jj:\t\t", J, j)
-        
         
         
         # Define plot parameters 
@@ -739,10 +750,24 @@ for i, std_dir in enumerate(std_dirs):
         
         
         # Correct for instrumental offset
-        QUPphi0_jq = np.where(QUPphi_jq != QUPphi_jq[3,j,0], QUPphi0_jq, QUPphi0_jq - offset)
-        QUPphi0_jqr = np.where(QUPphi_jqr != QUPphi_jqr[3,j,0,:], QUPphi0_jqr, QUPphi0_jqr - offset)
+        QUPphi0_jq = np.where(QUPphi_jq != QUPphi_jq[3,j,0], QUPphi0_jq, QUPphi0_jq + offset)
+        QUPphi0_jqr = np.where(QUPphi_jqr != QUPphi_jqr[3,j,0,:], QUPphi0_jqr, QUPphi0_jqr + offset)
         
         
+        '''
+        tempB = ESO_PHI - QUPphi_jq[3,[0,2],0]
+        if QUPphi0_jq[0,0,0] < 0:
+           tempB = tempB - 2*1.54 - 180.
+
+        tempV = ESO_PHI - QUPphi_jq[3,[1,3,4],0]
+        if QUPphi0_jq[0,1,0] < 0:
+           tempV = tempV - 2*1.8 - 180.
+        
+        #if temp < 0:
+        #    temp -= 180.
+        print("26-06-17:\t{}".format(temp)) 
+        break    
+        '''   
         
         
         
