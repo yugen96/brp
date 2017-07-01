@@ -11,6 +11,7 @@ from astropy.visualization.mpl_normalize import ImageNormalize
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib import ticker
+from matplotlib.path import Path
 from scipy import interpolate
 from scipy.stats import poisson
 from scipy.optimize import curve_fit
@@ -593,6 +594,44 @@ def compute_norm(arr, sigma_arr=None, ax=0):
 
 
 #################### PLOT FUNCTIONS ####################
+
+
+
+# Two functions for brightening/darkening html hex string colors
+def clamp(val, minimum=0, maximum=255):
+    if val < minimum:
+        return minimum
+    if val > maximum:
+        return maximum
+    return val
+
+def colorscale(hexstr, scalefactor):
+    """
+    Scales a hex string by ``scalefactor``. Returns scaled hex string.
+
+    To darken the color, use a float value between 0 and 1.
+    To brighten the color, use a float value greater than 1.
+
+    >>> colorscale("#DF3C3C", .5)
+    #6F1E1E
+    >>> colorscale("#52D24F", 1.6)
+    #83FF7E
+    >>> colorscale("#4F75D2", 1)
+    #4F75D2
+    """
+
+    hexstr = hexstr.strip('#')
+
+    if scalefactor < 0 or len(hexstr) != 6:
+        return hexstr
+
+    r, g, b = int(hexstr[:2], 16), int(hexstr[2:4], 16), int(hexstr[4:], 16)
+
+    r = clamp(r * scalefactor)
+    g = clamp(g * scalefactor)
+    b = clamp(b * scalefactor)
+
+    return "#%02x%02x%02x" % (r, g, b)
 
 
 
@@ -1532,8 +1571,37 @@ def align_slits2(slits, pixoffs):
     '''
     
     return slitdiff_crop, slitsum_crop, cal_slit
-    
 
+
+
+# Function for stacking images
+def stackim(ims, offs=None):
+    
+    # Initialize offsets
+    if offs is None:
+        offs = np.zeros(len(ims), dtype=int)
+    
+    # Set framesize
+    maxNy, maxNx = np.amax([im.shape for im in ims], axis=0)
+    framesize = (2*np.array([maxNy,maxNx]).astype(int)
+    upleft_corner = (0.25*framesize).astype(int)
+    
+    # Embed the images in larger arrays
+    imembs = []
+    for imnr, im in enumerate(ims):
+        embed(O, framesize, cornerpix=lowlcorn)
+        imemb = embed(im, framesize, offset=offs[imnr], cornerpix=lowlcorn)
+        imembs.append(imemb)
+    
+    # Stack the images
+    imstack = np.nanmedian(imembs, axis=0)
+    # Cut off nan values
+    overlmask = ~np.isnan(np.prod(imembs, axis=0))
+    imstack = mask2d(imstack, overlmask)
+    
+    return imstack
+        
+    
 
 
 # Function for aligning a slitpair, using predetermined offset interpolations    
@@ -1574,8 +1642,8 @@ def detslitdiffnorm(slitpair, offs_i, savefigs=False, plotdirec=None, imdirec=No
     # Align the slits using the median whole-pixel offset
     framesize = 2*np.array(O.shape)
     lowlcorn = (0.25*framesize).astype(int)
-    Oembed = polfun.embed(O, framesize, cornerpix=lowlcorn)
-    Eembed = polfun.embed(E, framesize, offset=[offsfactx,offsfacty], cornerpix=lowlcorn)
+    Oembed = embed(O, framesize, cornerpix=lowlcorn)
+    Eembed = embed(E, framesize, offset=[offsfactx,offsfacty], cornerpix=lowlcorn)
     O_E = (Oembed - Eembed)[lowlcorn[0]:lowlcorn[0]+O.shape[0],
                             lowlcorn[1]:lowlcorn[1]+O.shape[1]]       
     OplusE = (Oembed + Eembed)[lowlcorn[0]:lowlcorn[0]+O.shape[0],
@@ -1682,8 +1750,11 @@ def detpol(slitdiffnorm_lst, S_N, offsxy0__45=np.zeros(2), offsxy22_5__67_5=np.z
     if np.sum(offsxy22_5__67_5 != np.zeros(2)) != 0:
         U_norm = U_norm[lowlcorn[0]:lowlcorn[0]+slitshape[0],
                         lowlcorn[1]:lowlcorn[1]+slitshape[1]]
+    # Determine error margins (see Bagnulo 2009 appendix formulae A14 and A15)
+    sigmaQ_norm = (1/(2*np.sqrt(len(slitdiffnorm_lst))) / S_N)
+    sigmaU_norm = (1/(2*np.sqrt(len(slitdiffnorm_lst))) / S_N)    
+    print("DEBUG in detpol Q^2 + U^2 - sigma_Q^2:\t{}".format(U_norm**2 + Q_norm**2 - sigmaU_norm**2))
     
-                     
     # Diagnostic plot (check exposure alignment)
     plt.imshow(U_norm - Q_norm, origin='lower', vmin=-1, vmax=1)
     plt.colorbar()
@@ -1697,8 +1768,6 @@ def detpol(slitdiffnorm_lst, S_N, offsxy0__45=np.zeros(2), offsxy22_5__67_5=np.z
     phiL_DEG = (180/np.pi)*phiL + corran #deg
     
     # Determine error margins (see Bagnulo 2009 appendix formulae A14 and A15)
-    sigmaQ_norm = (1/(2*np.sqrt(len(slitdiffnorm_lst))) / S_N)
-    sigmaU_norm = (1/(2*np.sqrt(len(slitdiffnorm_lst))) / S_N)
     sigma_pL = np.sqrt( (np.cos(2*phiL))**2 * sigmaQ_norm**2 + 
                         (np.sin(2*phiL))**2 * sigmaU_norm**2 )
     temp = np.sqrt( (np.sin(2*phiL))**2 * sigmaQ_norm**2 + 
@@ -1707,58 +1776,60 @@ def detpol(slitdiffnorm_lst, S_N, offsxy0__45=np.zeros(2), offsxy22_5__67_5=np.z
     sigma_phiL_DEG = (180./np.pi) * sigma_phiL #deg
     
     return([U_norm, Q_norm, pL, phiL_DEG], [sigmaQ_norm, sigmaU_norm, sigma_pL, sigma_phiL_DEG])
+    
 
-    
-'''
-# Function for selecting a rotated rectangular region from an array
-def selrotrect(data, boxcent, boxsizs, theta):
-    
-    # Compute the non-rotated box corners
-    lowlcorn0, lowrcorn0 = boxcent - 0.5*boxsizs, boxcent - np.array([1,-1]) * boxsizs
-    uprcorn0, uprcorn0 = boxcent + 0.5*boxsizs, boxcent - np.array([-1,1]) * boxsizs
-    
-    # Rotate the box angles
-    corn_rotlst = []
-    rotmatrix = np.array([[np.cos(theta),-np.sin(theta)],[np.sin(theta),np.cos(theta)]])
-    for corn in [lowlcorn0, lowrcorn0, uprcorn0, uplcorn0]:
-        corn_rot = np.matmul(rotmatrix,corn)
-        corn_rotlst.append(corn_rot)
-    
-    # Define boundaries
-    xmax 
-'''    
-        
-        
 
-def selrotrect(data, boxcents, boxsizs, theta):
+# Circular array mask
+def cmask(data, center, radius):
+    x0,y0 = center
+    Ny, Nx = data.shape
+    xgrid, ygrid = np.ogrid[-y0:Ny-y0,-x0:Nx-x0]
+    mask = xgrid*xgrid + ygrid*ygrid <= radius*radius
     
-    # Determine data shape
-    datashape = np.array(data.shape)
-    # Set framesize and lower left corner of embeded array
-    framesize = np.array(2*[np.max(datashape)])
-    lowlcorn = (0.25*framesize).astype(int)
-    
-    # Embed the data in a larger array
-    dataemb = embed(data, framesize, cornerpix=lowlcorn)
-    
-    # Rotate the pixels
-    rotmatrix = np.array([[np.cos(-theta),-np.sin(-theta)],[np.sin(-theta),np.cos(-theta)]])
-    for coord in np.argwhere(~np.isnan(dataemb))
-    
-    
+    # Diagnostic plot
     '''
-    # Rotate each pixel
-    for rowno in np.arange(lowlcorn[0]:lowlcorn[0]+data.shape[0]):
-        for colno in np.arange(lowlcorn[1]:lowlcorn[1]+data.shape[1]):
-            
-            # Determine the row and column numbers respective to the box center
-            rownoresp, colnoresp = rowno - boxcents[0], colno - boxcents[1]
-            # Rotate the pixels
-            newrownoresp = colnoresp*np.cos(theta) - rownoresp*np.sin(theta)
-            newcolnoresp = colnoresp*np.sin(theta) + rownoresp*np.cos(theta)
-            dataemb[rowno+newrowno,colno+newcolno] = dataemb[rowno,colno]
+    plt.imshow(data, origin='lower', cmap='afmhot', alpha=0.5)
+    plt.imshow(mask, origin='lower', cmap='Greys', alpha=0.5)#, alpha=0.5)
+    plt.scatter(center[0], center[1], color='k', s=50)
+    plt.show()
+    plt.close()
     '''
-            
+    
+    return(data[mask], mask)
+    
+
+
+# Function for selecting a rotated rectangle from a data array
+def createrectmask(data, boxcent, boxsizs, theta):
+    
+    # Define rotation matrix #theta needs to be in [rad]
+    rotmatrix = np.array([[np.cos(theta),-np.sin(theta)],[np.sin(theta),np.cos(theta)]])  
+    # Set up rectangle corner coordinates
+    uplcorn = boxcent + np.matmul(rotmatrix,0.5*np.array([-boxsizs[0],boxsizs[1]]))
+    lowlcorn = boxcent + np.matmul(rotmatrix,0.5*np.array([-boxsizs[0],-boxsizs[1]]))
+    lowrcorn = boxcent + np.matmul(rotmatrix,0.5*np.array([boxsizs[0],-boxsizs[1]]))
+    uprcorn = boxcent + np.matmul(rotmatrix,0.5*np.array([boxsizs[0],boxsizs[1]]))
+    rect_verts = np.rint([uplcorn, lowlcorn, lowrcorn, uprcorn]).astype(int)
+    
+    # Create vertex coordinates for each grid cell
+    ny, nx = data.shape
+    xgrid, ygrid = np.meshgrid(np.arange(nx),np.arange(ny))
+    points = np.vstack((xgrid.flatten(),ygrid.flatten())).T
+    
+    # Create boolean rotated rectangular mask
+    path = Path(rect_verts)
+    rectmask = path.contains_points(points)
+    rectmask = rectmask.reshape((ny,nx))
+    
+    # Diagnostic plot
+    plt.imshow(data, origin='lower', cmap='afmhot', alpha=0.5, vmin=-10, vmax=60)
+    plt.imshow(rectmask, origin='lower', cmap='Greys', alpha=0.5)#, alpha=0.5)
+    plt.scatter(rect_verts[:,0], rect_verts[:,1], color='k')
+    #plt.show()
+    plt.close()
+    
+    return(data[rectmask], rectmask)
+    
 
 #################### END FUNCTIONS FOR SLIT APPENDAGE ####################
 #################### END FUNCTIONS #############################################
