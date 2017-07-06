@@ -839,6 +839,8 @@ def QvsU(fig, ax, QU, offsetangle=0., PLPHI=np.zeros(4), checkPphi=[False,False]
         # draw a bbox of the region of the inset axes in the parent axes and connecting lines between the bbox and the inset axes area
         mark_inset(ax, inset_ax, loc1=2, loc2=4, fc="none", ec="0.7")
         
+    return fig , ax   
+    
         
         
 # Function for fitting a sine wave
@@ -1202,14 +1204,14 @@ def offsetopt_well(ims, dxrange, dyrange, center, R,
             
             # Compute nomalized flux for whole image
             interim, cornershift = align_slits(ims, [[dx,dy]], detoffs=True)
-            newcent = np.array(center) - cornershift
+            newcent = np.array(center) + cornershift[[1,0]]
             
             # Diagnostic plot
             '''
             plt.figure()
-            plt.imshow(interim, origin='lower', vmin=0., vmax=0.2)
+            plt.imshow(interim, origin='lower', vmin=0, vmax=1)
             plt.colorbar()
-            plt.scatter(center[0], center[1], c='k', s=50)
+            plt.scatter(newcent[0], newcent[1], c='k', s=50)
             plt.show()
             plt.close()
             '''
@@ -1230,13 +1232,24 @@ def offsetopt_well(ims, dxrange, dyrange, center, R,
     offset_lst.append(offset_arr)
     
     
+    # Mask high variance points
+    '''
+    offset_var = np.var(offset_arr)
+    varmask = ((offset_arr - np.median(offset_arr))**2 < 3*offset_var)
+    offset_arr = np.where(varmask, offset_arr, np.median(offset_arr))
+    '''
+    
+    
     '''
     plt.figure()
-    plt.imshow(offset_arr, origin='lower', vmax=1e5)
+    plt.imshow(offset_arr, origin='lower')
     plt.colorbar()
     plt.show()
     plt.close()
-    '''# Diagnostic plot
+    '''
+    # Diagnostic plot
+    
+    
     
     
     # Fit parameter trial input
@@ -1263,8 +1276,7 @@ def offsetopt_well(ims, dxrange, dyrange, center, R,
     
     # Determine the difference between the 2dGaussian model and the flux data
     fitgauss2d = gaussian2d((dxgrid, dygrid), *popt_gauss).reshape(offset_arr.shape)
-    modeval_gauss = offset_arr - fitgauss2d
-    fitgauss_lst.append(fitgauss2d) 
+    
     
     
     '''
@@ -1276,7 +1288,8 @@ def offsetopt_well(ims, dxrange, dyrange, center, R,
     fig.colorbar(fitdat)
     plt.show()
     plt.close()
-    '''# Diagnostic plot    
+    '''
+    # Diagnostic plot    
     
     
     
@@ -1575,7 +1588,7 @@ def align_slits2(slits, pixoffs):
 
 
 # Function for stacking images
-def stackim(ims, offs=None):
+def stackim(ims, offs=None, returnmask=False):
     
     # Initialize offsets
     if offs is None:
@@ -1583,35 +1596,39 @@ def stackim(ims, offs=None):
     
     # Set framesize
     maxNy, maxNx = np.amax([im.shape for im in ims], axis=0)
-    framesize = (2*np.array([maxNy,maxNx]).astype(int)
-    upleft_corner = (0.25*framesize).astype(int)
+    framesize = (2*np.array([maxNy,maxNx])).astype(int)
+    uplcorn = (0.25*framesize).astype(int)
     
     # Embed the images in larger arrays
     imembs = []
     for imnr, im in enumerate(ims):
-        embed(O, framesize, cornerpix=lowlcorn)
-        imemb = embed(im, framesize, offset=offs[imnr], cornerpix=lowlcorn)
+        imemb = embed(im, framesize, offset=np.array(offs[imnr]).astype(int), cornerpix=uplcorn)
         imembs.append(imemb)
     
     # Stack the images
     imstack = np.nanmedian(imembs, axis=0)
     # Cut off nan values
     overlmask = ~np.isnan(np.prod(imembs, axis=0))
-    imstack = mask2d(imstack, overlmask)
+    imstack, newuplcorn = mask2d(imstack, overlmask, compute_uplcorn=True)
     
-    return imstack
+    if not returnmask:
+        return imstack
+    else:
+        return [imstack, overlmask, uplcorn, newuplcorn]
         
     
 
 
 # Function for aligning a slitpair, using predetermined offset interpolations    
-def detslitdiffnorm(slitpair, offs_i, savefigs=False, plotdirec=None, imdirec=None, suffix=None):
+def detslitdiffnorm(slitpair, pixoffs, suboffs_i, savefigs=False, 
+                    plotdirec=None, imdirec=None, suffix=None):
 
     # Extract O and E from slitpair
     E, O = slitpair
     gradyO, gradxO = np.gradient(O)
     # Extract interpolated x- and y-offsets
-    offsx_i, offsy_i = offs_i
+    pixoffsx, pixoffsy = pixoffs
+    suboffsx_i, suboffsy_i = suboffs_i
     
     
     # Determine median whole-pixel offsets
@@ -1632,18 +1649,14 @@ def detslitdiffnorm(slitpair, offs_i, savefigs=False, plotdirec=None, imdirec=No
                                                        np.nanmedian(gradfacty_i)))
     '''
     
-    
-    # Determine piecewise whole-pixel offsets
-    offsfactx = int(np.nanmedian(np.rint(offsx_i)[0]))
-    offsfacty = int(np.nanmedian(np.rint(offsy_i)[1]))
     # Determine piecewise gradient subtraction factors
-    gradfactx_i, gradfacty_i = offsx_i % 1, offsy_i % 1
+    gradfactx_i, gradfacty_i = suboffs_i
     
     # Align the slits using the median whole-pixel offset
     framesize = 2*np.array(O.shape)
     lowlcorn = (0.25*framesize).astype(int)
-    Oembed = embed(O, framesize, cornerpix=lowlcorn)
-    Eembed = embed(E, framesize, offset=[offsfactx,offsfacty], cornerpix=lowlcorn)
+    Oembed = polfun.embed(O, framesize, cornerpix=lowlcorn)
+    Eembed = polfun.embed(E, framesize, offset=[pixoffsx,pixoffsy], cornerpix=lowlcorn)
     O_E = (Oembed - Eembed)[lowlcorn[0]:lowlcorn[0]+O.shape[0],
                             lowlcorn[1]:lowlcorn[1]+O.shape[1]]       
     OplusE = (Oembed + Eembed)[lowlcorn[0]:lowlcorn[0]+O.shape[0],
@@ -1822,11 +1835,13 @@ def createrectmask(data, boxcent, boxsizs, theta):
     rectmask = rectmask.reshape((ny,nx))
     
     # Diagnostic plot
+    '''
     plt.imshow(data, origin='lower', cmap='afmhot', alpha=0.5, vmin=-10, vmax=60)
     plt.imshow(rectmask, origin='lower', cmap='Greys', alpha=0.5)#, alpha=0.5)
     plt.scatter(rect_verts[:,0], rect_verts[:,1], color='k')
-    #plt.show()
+    plt.show()
     plt.close()
+    '''
     
     return(data[rectmask], rectmask)
     

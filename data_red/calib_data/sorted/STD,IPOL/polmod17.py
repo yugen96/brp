@@ -132,9 +132,10 @@ def apersum(image, px, py, r):
     
 
 # Function which computes normalized flux differences as well as the ordinary and extraordinary counts for a preselection regions in various images defined by 'loc_lsts'. 
-def compute_fluxlsts(std_dirs, bias, masterflat_norm, loc_lsts, r_range):
+def compute_fluxlsts(std_dirs, bias, masterflat_norm, loc_lsts, r_range, datasavedir=None):
 
     # Compute the linear polarization degrees for each template of exposures taken of Vela1_95 and WD1615_154
+    obj_names = ["Vela1_95", "WD1615 154"]
     for i, std_dir in enumerate(std_dirs): 
         print("\n\n\n{}".format(std_dir))
             
@@ -210,11 +211,15 @@ def compute_fluxlsts(std_dirs, bias, masterflat_norm, loc_lsts, r_range):
                 expno = header["HIERARCH ESO TPL EXPNO"]
                 filt_name = header["HIERARCH ESO INS FILT1 NAME"]
                 filt_id = header["HIERARCH ESO INS FILT1 ID"]
+                exptime = header["EXPTIME"]
                 ret_angle = header["HIERARCH ESO INS RETA2 POSANG"] * np.pi / 180. #rad
                 woll_angle = header["HIERARCH ESO INS WOLL POSANG"] * np.pi / 180. #rad
                 print("\t\t\t\tFILTER_ID: {A}; \t FILTER_NAME: {B}".format(A=filt_id, B = filt_name))
                 print("\t\t\t\tWollangle: {A}; \t Retangle: {B}".format(A=woll_angle, B = np.round(ret_angle, 2)))                
-                  
+                
+                
+                # Calibrate for different exposure times
+                data = data / exptime
 
    
                 # Initiate second sublist of F for distinguishing between different stars within the current exposure
@@ -280,7 +285,10 @@ def compute_fluxlsts(std_dirs, bias, masterflat_norm, loc_lsts, r_range):
         F_0lst, sigmaF_0lst = np.array(F_0lst), np.array(sigmaF_0lst) 
         
         # Save the flux arrays
-        savedir = std_dir.rsplit("/sorted")[0] + "/sorted/loadfiles/" + std_dir.rsplit("/",2)[1]
+        if datasavedir is None:
+            continue
+        else:
+            savedir = datasavedir +'/'+ std_dir.rsplit("/",2)[1] + "/fluxlsts"
         if not os.path.exists(savedir):
             os.makedirs(savedir)
         np.save(savedir + "/O_0lst.npy", O_0lst), np.save(savedir + "/sigmaO_0lst.npy", sigmaO_0lst)
@@ -501,7 +509,7 @@ def QvsU(fig, ax, QU, offsetangle=0., PLPHI=np.zeros(4), checkPphi=[False,False]
     
     
     # Addition 26-06-17: Compute difference angle between corrected and non-corrected
-    if PHI not is None:
+    if PHI is not None:
         phiL_uncorr, phiL_corr = 0.5*np.arctan(U/Q), 0.5*np.arctan(Ucorr/Qcorr) #rad
         phiLdiff = PHI - (180./np.pi)*phiL_corr #deg
         print("26-06-17:\t phiL_corrEXTRA = {}".format(phiLdiff))
@@ -687,6 +695,7 @@ for i, std_dir in enumerate(std_dirs):
     
       
     #### Plots for all templates ####  
+    quivims = []
     for J, tpl_name in enumerate(tpl_dirlst): 
         
         # Skip non-usable templates (non-usable templates should be put in a folder "skipped" or an equivalent directory which doesn't start with the string "tpl").
@@ -806,7 +815,7 @@ for i, std_dir in enumerate(std_dirs):
                         lblfig1 = lbl + " E"
                 
                 # Initiate subplots
-                ax1 = fig1.add_subplot(211)  
+                ax1 = fig1.add_subplot(111)  
             
                 # Compute distances to FOV centers for both the ordinary and extraordinary slits
                 regsdistOE.append( np.sqrt( (regions[:,0]-1034)**2 + (regions[:,n+1]-1034)**2 ) )
@@ -925,7 +934,7 @@ for i, std_dir in enumerate(std_dirs):
         ############## PLOT 4 ##############  
         
         
-           
+        
         
         
         ############## PLOT 5 ##############     
@@ -939,19 +948,25 @@ for i, std_dir in enumerate(std_dirs):
         datadirs, datafiles = mk_lsts(vecplotdir)
         header, datacor = extract_data(vecplotdir + datafiles[0])
         # Compute vectors
-        vectorX, vectorY = regions[:,0], regions[:,1]
-        vectorU = QUPphi0_jq[2,j,:] * np.cos(QUPphi0_jq[3,j,:]*np.pi/180.)
-        vectorV = QUPphi0_jq[2,j,:] * np.sin(QUPphi0_jq[3,j,:]*np.pi/180.)
-        M = np.hypot(vectorU, vectorV)
+        vectorX, vectorY = regions[0:-4,0], regions[0:-4,1]
+        polangles = np.where(QUPphi0_jq[3,j,0:-4] >= 0,QUPphi0_jq[3,j,0:-4],QUPphi0_jq[3,j,0:-4]+180)
+        vectorU = QUPphi0_jq[2,j,0:-4] * np.cos(polangles*np.pi/180.)
+        vectorV = QUPphi0_jq[2,j,0:-4] * np.sin(polangles*np.pi/180.)
         # Plot image
         norm = ImageNormalize(stretch=SqrtStretch())
-        image = ax5.imshow(datacor, cmap='afmhot', origin='lower', norm=norm)
+        image = ax5.imshow(datacor, cmap='afmhot', origin='lower', norm=norm, vmin=0, vmax=1500)
         ##########plt.colorbar(image)
+        print("DEBUG vectorU, vectorV:\t{}\n\t\t{}".format(vectorU, vectorV))
+        print("DEBUG quiverlength\t{}".format(vectorU**2 + vectorV**2))
         # Plot vectors
-        Q = ax5.quiver(vectorX, vectorY, vectorU, vectorV, units='inches', pivot='mid', color=colour2)
-                       #color = '#666699')
-    qk = ax5.quiverkey(Q, 0.15, 0.9, 5e-2, r'$5\%$ polarization', labelpos='N',
-                       coordinates='figure', fontproperties={"size": 15})
+        Q = ax5.quiver(vectorX, vectorY, vectorU, vectorV, units='x',  
+                       scale=5e-4, pivot='mid', color=colour2) #0.1% polarization per pixel
+        quivims.append(Q)
+                   #color = '#666699')
+    '''
+    qk = ax5.quiverkey(quivims[0], 0.15, 0.9, 1, r'$5\%$ polarization', 
+                       labelpos='N', coordinates='figure', fontproperties={"size": 15}) #0.5 inches = 5%
+    '''
     plt.colorbar(image)
     ############## PLOT 5 ##############  
     
@@ -973,7 +988,7 @@ for i, std_dir in enumerate(std_dirs):
     plt.ylabel(r'$\mathrm{Degree \ of \ linear \ polarization \ [-]}$', fontsize=20)
     plt.legend(loc = 'best')
     plt.tight_layout()
-    plt.savefig(savedir + '/' + 'RvsPl_alltplsV2')
+    plt.savefig(savedir + '/' + 'RvsPl_alltplsV2.png')
     
     
     plt.figure(1)
@@ -990,7 +1005,7 @@ for i, std_dir in enumerate(std_dirs):
     # Save plot 
     fig1.tight_layout()
     fig1.subplots_adjust(top=0.88)
-    plt.savefig(savedir + '/' + 'alpha_F') 
+    plt.savefig(savedir + '/' + 'alpha_F.png') 
     
         
     plt.figure(2)      
@@ -999,7 +1014,7 @@ for i, std_dir in enumerate(std_dirs):
     plt.ylabel(r'Counts [ADU]', fontsize=20)
     plt.legend(loc = 'best')
     plt.tight_layout()
-    plt.savefig(savedir + '/' + 'CumCounts')
+    plt.savefig(savedir + '/' + 'CumCounts.png')
     
     
     plt.figure(3)
@@ -1017,17 +1032,17 @@ for i, std_dir in enumerate(std_dirs):
     plt.ylabel(r'Degree of linear polarization [-]', fontsize=20)
     plt.legend(loc = 'best')
     plt.tight_layout()
-    plt.savefig(savedir + '/' + 'radialprofile')
+    plt.savefig(savedir + '/' + 'radialprofile.png')
     
     
     plt.figure(5)
     x_tickrange, y_tickrange = np.arange(0,2038,200), np.arange(1000,-1,-100)
-    plt.xticks(x_tickrange, (x_tickrange-1000)*pixscale), plt.yticks(y_tickrange,  (y_tickrange-500)*pixscale)
+    plt.xticks(x_tickrange, (x_tickrange-1000)*pixscale), plt.yticks(y_tickrange,  (y_tickrange)*pixscale)
     plt.xlabel(r'X [arcsec]', fontsize=20)
     plt.ylabel(r'Y [arcsec]', fontsize=20)
     plt.legend(loc = 'best')
     plt.tight_layout()
-    plt.savefig(savedir + '/' + 'polprofile')
+    plt.savefig(savedir + '/' + 'polprofile.png')
     
     
     # Show and close figures
