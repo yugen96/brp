@@ -11,6 +11,7 @@ from astropy.visualization.mpl_normalize import ImageNormalize
 from photutils import Background2D, SigmaClip, MedianBackground
 
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 from matplotlib import cm
 from scipy import interpolate
 from scipy.stats import poisson
@@ -80,9 +81,10 @@ chip_xyranges = [[183,1868],[25,934]]
 r_range = np.arange(1, 16) #[pixels]
 # Pixel scale
 pixscale = 0.126 #[arcsec/pixel]
-# Boolean variable for turning on/off the computation of the cubic splines
+# Boolean variables for turning on/off the computations
 detsplines1d, detsplines2d = False, False
 detoverlaps1d, detoverlaps2d = True, True
+recompute_fluxlsts = False
 
 
 # Cut and append slits
@@ -174,14 +176,33 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
     
     
     # Iterate over all templates
-    slitoffs_JKs = np.zeros([len(tpl_dirlst),4,5,2])
-    #slitx_JKs, slity_JKs, slitx_Jks, slity_Jks = np.zeros([4,len(tpl_dirlst),4,5],dtype=int) # TODO REMOVE
-    xcoords_JKs, ycoords_JKs, filters_Jk, retangles_Jk, J = [], [], [], [], 0
+    filters_Jk, retangles_Jk, J = [], [], 0
+    slitoffs_JKs, exptimes_JK = np.zeros([11,4,5,2]), np.zeros([11,4])
     OplusE__JK, O_E__JK, O_E_grad__JK, UQPphi_J, sigma_UQPphi_J = [], [], [], [], []
     for j, tpl_name in enumerate(tpl_dirlst):
         print("\tTPL:\t{}".format(tpl_name))
         tpl_dir = objdir + '/' + tpl_name
         print("DEBUG:\t{}".format(J))
+        
+        # Load or recompute intermediate results
+        if not recompute_fluxlsts:
+            UQPphi_J = np.load(datasavedir+"/UQPphi__i{}JK.npy".format(i+1))
+            OplusE__JK = np.load(datasavedir+"/OplusE__i{}JK.npy".format(i+1))
+            O_E__JK = np.load(datasavedir+"/O_E__i{}JK.npy".format(i+1))
+            O_E_grad__JK = np.load(datasavedir+"/O_E_grad__i{}JK.npy".format(i+1))
+            print("LOADED flux and stokes lists!")
+            filters_Jk = np.load(datasavedir+"/filters_i{}Jk.npy".format(i+1))
+            exptimes_JK = np.load(datasavedir+"/exptimes_i{}JK.npy".format(i+1))
+            print("LOADED filter and integration times lists!")
+            scapexarcs = np.load(npsavedir+"/scapexarcs.npy")
+            scapeyarcs = np.load(npsavedir+"/scapeyarcs.npy")
+            scapexslitarcs = np.load(datasavedir+
+                    "/tpl{}/exp{}/slitp2/scapexslitarcs_i{}j{}k{}slitp{}.npy".format(1,1,i+1,1,1,2))
+            scapeyslitarcs = np.load(datasavedir+
+                    "/tpl{}/exp{}/slitp2/scapeyslitarcs_i{}j{}k{}slitp{}.npy".format(1,1,i+1,1,1,2))
+            print("Loaded image axes ranges!")
+            break     
+        
         
         
         # Create a list with filenames of files stored within tpldir
@@ -197,9 +218,8 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
         
         
         # Iterate over all exposures
-        filters_k, retangles_k = [], []
         slitoffs_ks = np.zeros([4,5,2], dtype=int)
-        # slitx_ks, slity_ks = np.zeros(2,5) #TODO REMOVE
+        filters_k, retangles_k, exptimes_k = [], [], []
         O_Elst, OplusElst, O_E_gradlst, xcoords_ks, ycoords_ks = [], [], [], [], []
         for k, fname in enumerate(expfile_lst):
             print("\n\t\t {}".format(fname))
@@ -216,6 +236,7 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
             print("DEBUG filtername:\t{}".format(filtername))
             retangles_k.append(header["HIERARCH ESO INS RETA2 POSANG"]) #dtype float
             exptime = header["EXPTIME"]
+            exptimes_k.append(exptime)
             # De-biasing and flat-fielding corrections
             data = (data - Mbias) / Mflat_norm
             # Division by exposure time
@@ -312,7 +333,6 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
                 scapexslitarcs_grid, scapeyslitarcs_grid = np.meshgrid(scapexslitarcs,
                                                                        scapeyslitarcs) 
                 
-                
                 # Determine rms errors for the offset values
                 valrmse = np.sqrt((valslit - np.median(valslit))**2)
                 rmse = np.sqrt(np.mean((valslit - np.median(valslit))**2))
@@ -352,14 +372,15 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
                 # Append cubic spline interpolation to list
                 cdintp_xy.append(cubspl1d_val)
             
-            # Append to exposure list
-            '''
-            if np.sum((xcoords_ts[0] != xcoords_ts[1])) != 0:
-                print("C- and d-scape coordinates different!!!")
-                raise ValueError
-            xcoords_ks.append(xcoords_ts[0])
-            ycoords_ks.append(ycoords_ts[0]) 
-            ''' #TODO REMOVE
+            
+            
+            # Save axes ranges
+            polfun.savenp(scapexarcs, npsavedir, "scapexarcs")
+            polfun.savenp(scapeyarcs, npsavedir, "scapeyarcs")
+            polfun.savenp(scapexslitarcs, datasavedir+"/tpl{}/exp{}/slitp2".format(j+1,k+1),
+                          "scapexslitarcs_i{}j{}k{}slitp{}".format(i+1,j+1,k+1,2))
+            polfun.savenp(scapeyslitarcs, datasavedir+"/tpl{}/exp{}/slitp2".format(j+1,k+1),
+                          "scapeyslitarcs_i{}j{}k{}slitp{}".format(i+1,j+1,k+1,2))
             
             print("DEBUG cdoptoffs_star25(newnr18):\t{}, {}".format(cdintp_xy[0][21,302], 
                                                                     cdintp_xy[1][21,302]))
@@ -399,7 +420,7 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
             O_Elst.append(O_E), OplusElst.append(OplusE), O_E_gradlst.append(O_E_grad)
             
             
-            # Determine slitwise stellar coordinates
+            # Determine slitwise stellar coordinates for stacking
             xcents = np.sort(xslit-chip_xyranges[0][0])
             ycents = [m[0] for m in sorted(zip(yslit-Oylow, xslit), key=lambda l: l[1])]             
             for starno, [xcent,ycent] in enumerate(zip(xcents,ycents)):
@@ -460,7 +481,7 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
         print("DEBUG retangles:\t {} \t {}".format(retangles_k,type(retangles_k[0])))
         slitoffs_JKs[J] = [m[0] for m in sorted(zip(slitoffs_ks, retangles_k), key=lambda l: l[1])]
         #slity_JKs[J] = [m[0] for m in sorted(zip(slity_ks, retangles_k), key=lambda l: l[1])] #TODO REMOVE
-        # Save slitoffs to numpy array
+        # Save intermediate results
         polfun.savenp(slitoffs_JKs[J], datasavedir+"/tpl{}".format(J+1), 
                       "slitoffs_i{}J{}Ks".format(i+1,J+1))
         
@@ -495,6 +516,7 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
         O_E__K = [m[0] for m in sorted(zip(O_Elst, retangles_k), key=lambda l: l[1])] 
         OplusE__K = [m[0] for m in sorted(zip(OplusElst, retangles_k), key=lambda l: l[1])] 
         O_E_grad__K = [m[0] for m in sorted(zip(O_E_gradlst, retangles_k), key=lambda l: l[1])] 
+        exptimes_JK[J] = [m[0] for m in sorted(zip(exptimes_k, retangles_k), key=lambda l: l[1])] 
         # Append to lists
         O_E__JK.append(O_E__K), OplusE__JK.append(OplusE__K), O_E_grad__JK.append(O_E_grad__K)
         
@@ -532,11 +554,23 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
         filters_Jk.append(filters_k), retangles_Jk.append(retangles_k)
         # Add one to index
         J += 1
-        
+    
+    # Save intermediate results
+    polfun.savenp(UQPphi_J, datasavedir, "UQPphi__i{}JK".format(i+1))
+    polfun.savenp(OplusE__JK, datasavedir, "OplusE__i{}JK".format(i+1))
+    polfun.savenp(O_E__JK, datasavedir, "O_E__i{}JK".format(i+1))
+    polfun.savenp(O_E_grad__JK, datasavedir, "O_E_grad__i{}JK".format(i+1))    
+    polfun.savenp(filters_Jk, datasavedir, "filters_i{}Jk".format(i+1)) 
+    polfun.savenp(exptimes_JK, datasavedir, "exptimes_i{}JK".format(i+1)) 
+    ###################### FINISHED CALCULATIONS
+    
+    
+    
     
     
     # Transform into arrays
     UQPphi_J, sigma_UQPphi_J = np.array([UQPphi_J, sigma_UQPphi_J])
+    filters_Jk = np.array(filters_Jk)
     # SHIFTS BETWEEN TEMPLATES ARE ZERO?!
     '''
     #xcoords_JKs, ycoords_JKs = np.array(xcoords_JKs), np.array(ycoords_JKs) #TODO REMOVE
@@ -547,264 +581,455 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
         print("DEBUG shiftsU:\t{}".format(shiftsU_J))
     ''' #TODO REMOVE
     # Stack exposures
-    U_J, Q_J = UQPphi_J[:,0], UQPphi_J[:,1]
-    slitoffs_JK = np.mean(slitoffs_JKs, axis=2)
-    U_stacked, Umask, Uoldembuplcorn, Unewembuplcorn = polfun.stackim(U_J, slitoffs_JK[:,0],
-                                                                      returnmask=True)
-    Q_stacked, Qmask, Qoldembuplcorn, Qnewembuplcorn = polfun.stackim(Q_J, slitoffs_JK[:,1],
-                                                                      returnmask=True)
-    # TODO Determine stacked array errors
-
-
-    # Diagnostic plot
-    fig, axarr = plt.subplots(2, sharex=True)
-    im1 = axarr[0].imshow(U_stacked, origin='lower', cmap='afmhot', vmin=-.15, vmax=.15)
-    im2 = axarr[1].imshow(Q_stacked, origin='lower', cmap='afmhot', vmin=-.15, vmax=.15)
-    fig.subplots_adjust(right=0.8)
-    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-    fig.colorbar(im1, cax=cbar_ax)
-    plt.show()
-    plt.close()
+    fUQstar_mv, fUQfil_mv = np.tile(np.nan, [2,2,6,2]), np.tile(np.nan, [2,2,5,2])
+    stacked_fUQ, fUQfil_lst, fUQstar_lst = [], [], []
+    Vmask_J, Bmask_J = (filters_Jk[:,0]=="v_HIGH"), (filters_Jk[:,0]=="b_HIGH")
+    for filternr, [filtermask_J, filtername] in enumerate(zip([Vmask_J, Bmask_J],
+                                                            ["v_HIGH", "b_HIGH"])):
+        
+        # Select all templates corresponding to current filter
+        U_J, Q_J = UQPphi_J[:,0], UQPphi_J[:,1]
+        slitoffs_JK = np.mean(slitoffs_JKs, axis=2)
+        U_stacked, Umask, Uoldembuplcorn, Unewembuplcorn = polfun.stackim(U_J[filtermask_J],
+                                                                          slitoffs_JK[filtermask_J,0],
+                                                                          returnmask=True)
+        Q_stacked, Qmask, Qoldembuplcorn, Qnewembuplcorn = polfun.stackim(Q_J[filtermask_J],
+                                                                          slitoffs_JK[filtermask_J,1],
+                                                                          returnmask=True)
+        stacked_fUQ.append([U_stacked, Q_stacked])
+        # TODO Determine stacked array errors
+        
+        
+        # Diagnostic plot
+        '''
+        fig, axarr = plt.subplots(2, sharex=True)
+        im1 = axarr[0].imshow(U_stacked, origin='lower', cmap='afmhot', vmin=-.15, vmax=.15)
+        im2 = axarr[1].imshow(Q_stacked, origin='lower', cmap='afmhot', vmin=-.15, vmax=.15)
+        fig.subplots_adjust(right=0.8)
+        cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+        fig.colorbar(im1, cax=cbar_ax)
+        plt.show()
+        plt.close()
+        '''
+        
+        
+        # Save results as npsave files
+        polfun.savenp(U_stacked, datasavedir, "U_stacked__i{}f{}".format(i+1,filternr+1))      
+        polfun.savenp(Q_stacked, datasavedir, "Q_stacked__i{}f{}".format(i+1,filternr+1))
+        # Save results as fitsfiles
+        polfun.savefits(U_stacked, imsavedir, "U_stacked__i{}f{}".format(i+1,filternr+1))
+        polfun.savefits(Q_stacked, imsavedir, "Q_stacked__i{}f{}".format(i+1,filternr+1))
+        
+        
+        # Diagnostic plot
+        '''
+        fig, axarr = plt.subplots(2, sharex=True)
+        im1 = axarr[0].imshow(U_stacked, origin='lower', cmap='afmhot', vmin=-.1, vmax=.1,
+                              extent=[np.min(scapexslitarcs),np.max(scapexslitarcs),
+                                      np.min(scapeyslitarcs),np.max(scapeyslitarcs)])
+        axarr[0].set_ylim(bottom=np.min(scapeyslitarcs), top=np.max(scapeyslitarcs))
+        axarr[0].set_title('U',fontsize=26)
+        axarr[0].set_ylabel('Y [arcsec]',fontsize=20)  
+        im2 = axarr[1].imshow(Q_stacked, origin='lower', cmap='afmhot', vmin=-.1, vmax=.1,
+                              extent=[np.min(scapexslitarcs),np.max(scapexslitarcs),
+                                      np.min(scapeyslitarcs),np.max(scapeyslitarcs)])
+        axarr[1].set_ylim(bottom=np.min(scapeyslitarcs), top=np.max(scapeyslitarcs))
+        axarr[1].set_title('Q',fontsize=26)
+        axarr[1].set_ylabel('Y [arcsec]',fontsize=20)
+        fig.subplots_adjust(right=0.8)
+        cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+        fig.colorbar(im1, cax=cbar_ax)
+        plt.savefig(pltsavedir+"/UQ_i{}f{}".format(i+1,filternr+1))
+        plt.show()
+        plt.close()
+        '''
+     
+        
+        
+        
+        # Create flattened array with the pixel values for the selected filaments
+        boxcents = np.array([[850,64],[846,35],[871,45],[818,39],[796,47]]) #pix
+        boxsizes = np.array([[17,9],[26,8],[13,6],[20,8],[15,4]]) #pix
+        boxrots = np.array([0, 0, 45, 165, 160]) #deg
+        uplims = [300,15,16,6,6]
+        I = np.array(OplusE__JK)[0,0]
+        UQfil_lst = []
+        for ind, [polpar, stackmask, 
+                  oldembulcorn, newembulcorn] in enumerate(zip([U_stacked, Q_stacked],[Umask,Qmask],
+                                                               [Uoldembuplcorn, Qoldembuplcorn],
+                                                               [Unewembuplcorn, Qnewembuplcorn])):
+            
+            # Recalibrate the box centers and the stacking mask
+            boxcents_cal = np.array(boxcents) - (newembulcorn-oldembulcorn)[[1,0]]
+            stackmask_cal = stackmask[oldembulcorn[0]:oldembulcorn[0]+I.shape[0],
+                                      oldembulcorn[1]:oldembulcorn[1]+I.shape[1]]
+            
+            # Determine regional counts
+            polreg_lst = []
+            for boxnr, [boxcent, boxsize, boxrot] in enumerate(zip(boxcents_cal,boxsizes,boxrots)):
+                # Determine the regional masks
+                Imasked, filmask = polfun.createrectmask(polfun.mask2d(I,stackmask_cal), 
+                                                         boxcent, boxsize, (np.pi/180)*boxrot)
+                valmask = (Imasked < uplims[boxnr]) # Apply sharp masking to select filament pixels
+                # Extract counts
+                temp = polpar[filmask]
+                polreg_lst.append(temp[valmask])
+            
+            # Append to list specifying U and Q for each filament
+            UQfil_lst.append(np.array(polreg_lst))
+        # Append to list which distinguishes between filters
+        fUQfil_lst.append(UQfil_lst)
+        
+        
+        
+        
+        
+        # Create flattened array with the pixel values for the selected stellar regions
+        circaps = [[556,47,6],[453,33,4],[303,21,6],[1547,55,5],[1479,9,7],[1064,28,5]]
+        I = np.array(OplusE__JK)[0,0]
+        UQstar_lst = [] 
+        for ind, [polpar, stackmask, 
+                  oldembulcorn, newembulcorn] in enumerate(zip([U_stacked, Q_stacked],[Umask,Qmask],
+                                                               [Uoldembuplcorn, Qoldembuplcorn],
+                                                               [Unewembuplcorn, Qnewembuplcorn])):
+            
+            # Recalibrate the aperture centers and the stacking mask
+            apcents_cal = np.array(circaps)[:,0:2] - (newembulcorn-oldembulcorn)[[1,0]]
+            stackmask_cal = stackmask[oldembulcorn[0]:oldembulcorn[0]+I.shape[0],
+                                      oldembulcorn[1]:oldembulcorn[1]+I.shape[1]]
+            
+            # Determine regional counts
+            polstar_lst = []
+            for stellarnr in range(len(circaps)):
+                
+                # Select aperture center and radius
+                apcent, apR = apcents_cal[stellarnr], np.array(circaps)[stellarnr,2]
+                # Determine the regional masks
+                _, starmask = polfun.cmask(I, apcent, apR)
+                starmask_cal = polfun.mask2d(starmask,stackmask_cal)
+                # Extract counts
+                temp = polpar[starmask_cal]
+                polstar_lst.append(temp)
+                
+                # Diagnostic plot
+                '''
+                plt.imshow(polfun.mask2d(I, stackmask_cal), origin='lower', cmap='afmhot', alpha=0.5)
+                plt.imshow(starmask_cal, origin='lower', cmap='Greys', alpha=0.5)#, alpha=0.5)
+                #plt.scatter(center[0], center[1], color='k', s=50)
+                plt.show()
+                plt.close()
+                '''
+                
+            # Append to list specifying U and Q for each star
+            UQstar_lst.append(np.array(polstar_lst))
+        # Append to list which distinguishes between filters
+        fUQstar_lst.append(np.array(UQstar_lst))
+        
+        
+        
+        
+        # TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+        # Create filament histograms for U/I and Q/I
+        # Set up  new figure
+        fig, axarr = plt.subplots(2, 5, sharex='col', sharey='row', figsize=(20,8))
+        # Set bin ranges and initialize maximum frequency arrays
+        binrange, nrbins, truemaxfreq = (-0.1,0.1), 21, 0
+        for ind in range(2): 
+            
+            # Plot Stokes parameter for each selected region
+            UQPhists = []
+            for filNR, poldata in enumerate(fUQfil_lst[filternr][ind]): 
+                
+                #weights = np.ones_like(poldata)/float(len(poldata))
+                hist, bins = np.histogram(poldata, range=binrange, bins=nrbins)#, weights=weights)
+                bincents = (bins[:-1] + bins[1:]) / 2
+                axarr[ind][filNR].bar(bincents, hist, #color=filUQcolors[filNR,ind],# alpha=0.5, 
+                                      align='center', width=0.7*(bins[1]-bins[0])) 
+                                      #label=r"X={}".format(polparlabs[ind]))
+                                 
+                # Plot Gaussian fit
+                mean, var = np.mean(poldata), np.var(poldata)
+                print("Mean, var:\t{} , {}".format(mean, var))
+                fUQfil_mv[filternr,ind,filNR,:] = [mean,var] # Append to array
+                pdf_x = np.linspace(np.min(poldata), np.max(poldata), 100)
+                pdf_y = (1./np.sqrt(2*np.pi*var)) * np.exp((-0.5*(pdf_x-mean)**2) / var)
+                axarr[ind][filNR].plot(pdf_x, pdf_y, 'k--')
+                axarr[ind][filNR].set_xlim(xmin=-0.15, xmax=0.15)
+                combfreqs = np.concatenate([pdf_y,hist])
+                maxfreq = np.max(combfreqs).astype(int)
+                if maxfreq > truemaxfreq:
+                    truemaxfreq = maxfreq
+                    axarr[ind][filNR].set_ylim(ymin=0, ymax=1.2*truemaxfreq) 
+                #axarr[ind][filNR].legend(loc='upper left')
+                plt.grid()
+                #axarr[filNR].set_title(r"Filament {}".format(filNR+1))
+                #axarr[filNR].legend(loc='upper right')
+                #axarr[ind][4].set_xlabel(r"X/I", fontsize=20)
+        
+        # Plot y-labels and y-titles
+        panelrowtitles, rowtitlelocs = [r"Q/I", r"U/I"], [0.75, 0.25]
+        for ind in range(2):
+            axarr[ind][0].set_ylabel(r"Frequency [--]", fontsize=20)
+            fig.text(0.03, rowtitlelocs[ind], panelrowtitles[ind], fontsize=26, 
+                     ha="center", va="center", rotation=90) 
+        # Plot x-labels and x-titles
+        for filNR in range(len(fUQfil_lst[filternr][1])):
+            axarr[0][filNR].set_title(r"Filament {}".format(filNR), fontsize=26)    
+            axarr[1][filNR].set_xlabel(r"X/I", fontsize=20)
+        
+        #plt.tight_layout()
+        plt.savefig(pltsavedir + "/filhists_i{}f{}NEW.png".format(i+1, filternr+1))
+        plt.show()
+        plt.close()   
+        
+                    
+        '''
+        # Create filament histograms for U/I and Q/I
+        filUQcolors = np.array([['#660000','#000066'], ['#ff0000','#0033cc'], ['#cc3300','#0099cc'], 
+                                ['#ff6600','#00cc66'], ['#ff9933','#009933'], ['#ffcc00','#003300']])
+        polparlabs, suffixes = [r"U", r"Q", r"$P_L$ [%]"], ["U", "Q", "P"]
+        # Set up  new figure
+        fig, axarr = plt.subplots(4, sharex='col', sharey='row', figsize=(20,8))
+        # Set bin ranges and initialize maximum frequency arrays
+        binrange, nrbins, truemaxfreq = (-0.1,0.1), 21, 0
+        for ind in range(2): 
+            
+            # Plot Stokes parameter for each selected region
+            UQPhists = []
+            for filNR, poldata in enumerate(fUQfil_lst[filternr][ind]): 
+                
+                #weights = np.ones_like(poldata)/float(len(poldata))
+                hist, bins = np.histogram(poldata, range=binrange, bins=nrbins)#, weights=weights)
+                bincents = (bins[:-1] + bins[1:]) / 2
+                axarr[filNR].bar(bincents, hist, color=filUQcolors[filNR,ind],# alpha=0.5, 
+                                      align='center', width=0.7*(bins[1]-bins[0]), 
+                                      label=r"X={}".format(polparlabs[ind]))
+                                 
+                # Plot Gaussian fit
+                mean, var = np.mean(poldata), np.var(poldata)
+                print("Mean, var:\t{} , {}".format(mean, var))
+                fUQfil_mv[filternr,ind,filNR,:] = [mean,var] # Append to array
+                pdf_x = np.linspace(np.min(poldata), np.max(poldata), 100)
+                pdf_y = (1./np.sqrt(2*np.pi*var)) * np.exp((-0.5*(pdf_x-mean)**2) / var)
+                axarr[filNR].plot(pdf_x, pdf_y, 'k--')
+                axarr[filNR].set_xlim(xmin=-0.15, xmax=0.15)
+                combfreqs = np.concatenate([pdf_y,hist])
+                maxfreq = np.max(combfreqs).astype(int)
+                if maxfreq > truemaxfreq:
+                    truemaxfreq = maxfreq
+                    axarr[filNR].set_ylim(ymin=0, ymax=1.2*truemaxfreq) 
+                axarr[filNR].legend(loc='upper left')
+                plt.grid()
+                #axarr[filNR].set_title(r"Filament {}".format(filNR+1))
+                #axarr[filNR].legend(loc='upper right')
+        
+        axarr[2].set_ylabel(r"Frequency", fontsize=20)
+        axarr[4].set_xlabel(r"X/I", fontsize=20)
+        axarr[0].set_title(r"Filament stokes distribution", fontsize=26)    
+        #plt.tight_layout()
+        plt.savefig(pltsavedir + "/filhists{}_i{}f{}.png".format(suffixes[ind], i+1, filternr+1))
+        plt.show()
+        plt.close() 
+        '''
+        #TODO Make panels with b and v plotted together..
+        
+        
+        
+        # Create stellar histograms for U/I and Q/I
+        starUQcolors = np.array([['#660000','#000066'], ['#ff0000','#0033cc'], ['#cc3300','#0099cc'], 
+                                ['#ff6600','#00cc66'], ['#ff9933','#009933'], ['#ffcc00','#003300']])
+        polparlabs, suffixes = [r"U", r"Q", r"$P_L$ [%]"], ["U", "Q", "P"]
+        # Set up  new figure
+        fig, axarr = plt.subplots(6, sharex=True)
+        # Set bin ranges and initialize maximum frequency arrays
+        binrange, nrbins, truemaxfreq = (-0.1,0.1), 21, 0
+        for ind in range(2): 
+            
+            # Plot Stokes parameter for each selected region
+            for starNR, poldata in enumerate(fUQstar_lst[filternr][ind]): 
+                
+                #weights = np.ones_like(poldata)/float(len(poldata))
+                hist, bins = np.histogram(poldata, range=binrange, bins=nrbins)#, weights=weights)
+                bincents = (bins[:-1] + bins[1:]) / 2
+                axarr[starNR].bar(bincents, hist, color=starUQcolors[starNR,ind], alpha=0.5, 
+                                 align='center', width=0.7*(bins[1]-bins[0]), 
+                                 label=r"X={}".format(polparlabs[ind]))
+                # Plot Gaussian fit
+                mean, var = np.mean(poldata), np.var(poldata)
+                fUQstar_mv[filternr,ind,starNR,:] = [mean,var] # Append to array
+                pdf_x = np.linspace(np.min(poldata), np.max(poldata), 100)
+                pdf_y = (1./np.sqrt(2*np.pi*var)) * np.exp((-0.5*(pdf_x-mean)**2) / var)
+                axarr[starNR].plot(pdf_x, pdf_y, 'k--')
+                axarr[starNR].set_xlim(xmin=-0.15, xmax=0.15)
+                combfreqs = np.concatenate([pdf_y,hist])
+                maxfreq = np.max(combfreqs).astype(int)
+                if maxfreq > truemaxfreq:
+                    truemaxfreq = maxfreq
+                    axarr[starNR].set_ylim(ymin=0, ymax=1.2*truemaxfreq) 
+                axarr[starNR].legend(loc='upper left')
+                plt.grid()
+        
+        axarr[2].set_ylabel(r"Frequency", fontsize=20)
+        axarr[5].set_xlabel(r"X/I", fontsize=20)
+        axarr[0].set_title(r"Stellar stokes distribution", fontsize=26)    
+        #plt.tight_layout()
+        plt.savefig(pltsavedir + "/starhistsUQ_i{}f{}.png".format(i+1, filternr+1))
+        plt.show()
+        plt.close() 
+        
     
     
-    # Save results as npsave files
-    polfun.savenp(UQPphi_J, datasavedir, "UQPphi_i{}J".format(i+1))
-    polfun.savenp(OplusE__JK, datasavedir, "UQPphi_i{}J".format(i+1))
-    polfun.savenp(O_E__JK, datasavedir, "UQPphi_i{}J".format(i+1))
-    polfun.savenp(O_E_grad__JK, datasavedir, "UQPphi_i{}J".format(i+1))
-    polfun.savenp(U_stacked, datasavedir, "U_stackedi{}".format(i+1))      
-    polfun.savenp(Q_stacked, datasavedir, "Q_stackedi{}".format(i+1))
-    # Save results as fitsfiles
-    polfun.savefits(U_stacked, imsavedir, "U_stackedi{}".format(i+1))
-    polfun.savefits(Q_stacked, imsavedir, "Q_stackedi{}".format(i+1))
-
-
-    # Diagnostic plot
-    fig, axarr = plt.subplots(2, sharex=True)
-    im1 = axarr[0].imshow(U_stacked, origin='lower', cmap='afmhot', vmin=-.1, vmax=.1,
-                          extent=[np.min(scapexslitarcs),np.max(scapexslitarcs),
-                                  np.min(scapeyslitarcs),np.max(scapeyslitarcs)])
-    axarr[0].set_ylim(bottom=np.min(scapeyslitarcs), top=np.max(scapeyslitarcs))
-    axarr[0].set_title('U',fontsize=26)
-    axarr[0].set_ylabel('Y [arcsec]',fontsize=20)  
-    im2 = axarr[1].imshow(Q_stacked, origin='lower', cmap='afmhot', vmin=-.1, vmax=.1,
-                          extent=[np.min(scapexslitarcs),np.max(scapexslitarcs),
-                                  np.min(scapeyslitarcs),np.max(scapeyslitarcs)])
-    axarr[1].set_ylim(bottom=np.min(scapeyslitarcs), top=np.max(scapeyslitarcs))
-    axarr[1].set_title('Q',fontsize=26)
-    axarr[1].set_ylabel('Y [arcsec]',fontsize=20) 
-    '''
-    im3 = axarr[2].imshow(UQPphi[2], origin='lower', cmap='afmhot', vmin=-.1, vmax=.1,
-                          extent=[np.min(scapexslitarcs),np.max(scapexslitarcs),
-                                  np.min(scapeyslitarcs),np.max(scapeyslitarcs)])
-    axarr[2].set_title('$P_L$',fontsize=26)
-    axarr[2].set_xlabel('X [arcsec]',fontsize=20), axarr[2].set_ylabel('Y [arcsec]',fontsize=20)
-    '''
-    fig.subplots_adjust(right=0.8)
-    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-    fig.colorbar(im1, cax=cbar_ax)
-    plt.savefig(pltsavedir+"/tpl{}/UQ_i{}j{}".format(j+1,i+1,j+1))
-    plt.show()
-    plt.close()
-
-
-
-    # Create flattened array with the pixel values for the selected filaments
-    boxcents = np.array([[850,64],[846,35],[871,45],[818,39],[796,47]]) #pix
-    boxsizes = np.array([[17,9],[26,8],[13,6],[20,8],[15,4]]) #pix
-    boxrots = np.array([0, 0, 45, 165, 160]) #deg
-    uplims = [300,15,16,6,6]
-    I = np.array(OplusE__JK)[0,0]
-    UQfil_lst = []
-    for ind, [polpar, stackmask, oldembulcorn, newembulcorn] in enumerate(zip([U_stacked, Q_stacked],
-                                                                              [Umask,Qmask],
-                                                                              [Uoldembuplcorn,
-                                                                               Qoldembuplcorn],
-                                                                              [Unewembuplcorn,
-                                                                               Qnewembuplcorn])):
-        
-        # Recalibrate the box centers and the stacking mask
-        boxcents_cal = np.array(boxcents) - (newembulcorn-oldembulcorn)[[1,0]]
-        stackmask_cal = stackmask[oldembulcorn[0]:oldembulcorn[0]+I.shape[0],
-                                  oldembulcorn[1]:oldembulcorn[1]+I.shape[1]]
-        
-        # Determine regional counts
-        polreg_lst = []
+    # Save the intermediate results
+    polfun.savenp(stacked_fUQ, datasavedir, "stacked_fUQ")
+    polfun.savenp(fUQfil_lst, datasavedir, "fUQfil_lst")
+    polfun.savenp(fUQstar_lst, datasavedir, "fUQstar_lst")
+    
+    
+    
+    
+                
+                            
+    # Plot I, Qbar, Ubar next to each other for both b and v
+    fig, axarr = plt.subplots(2, 3, sharex='col', sharey='row', figsize=(15,8))
+    # Plot total intensities
+    exptimev, exptimeb = exptimes_JK[[0,4],0]
+    imIb = axarr[0][0].imshow(OplusE__JK[0][0][:,734:986] / exptimev, origin='lower', 
+                              cmap='afmhot', vmin=-10/exptimev, vmax=100/exptimev, 
+                              extent=[np.min(scapexslitarcs[734:986]),
+                                      np.max(scapexslitarcs[734:986]),
+                                      np.min(scapeyslitarcs),np.max(scapeyslitarcs)])
+    imIv = axarr[1][0].imshow(OplusE__JK[4][0][:,734:986] / exptimeb, origin='lower', 
+                              cmap='afmhot', vmin=-10/exptimeb, vmax=100/exptimeb, 
+                              extent=[np.min(scapexslitarcs[734:986]),
+                                      np.max(scapexslitarcs[734:986]),
+                                      np.min(scapeyslitarcs),np.max(scapeyslitarcs)])
+    # Plot filament boundaries
+    for tempind in range(2):
         for boxnr, [boxcent, boxsize, boxrot] in enumerate(zip(boxcents_cal,boxsizes,boxrots)):
-            # Determine the regional masks
-            Imasked, filmask = polfun.createrectmask(polfun.mask2d(I,stackmask_cal), 
-                                                     boxcent, boxsize, (np.pi/180)*boxrot)
-            valmask = (Imasked < uplims[boxnr]) # Apply sharp masking to select filament pixels
-            # Extract counts
-            temp = polpar[filmask]
-            polreg_lst.append(temp[valmask])
-        
-        # Append to list  
-        UQfil_lst.append(np.array(polreg_lst))
-    
-    
-    
-    # Create flattened array with the pixel values for the selected filaments
-    circaps = [[556,47,6],[453,33,4],[303,21,6],[1547,55,5],[1479,9,7],[1064,28,5]]
-    I = np.array(OplusE__JK)[0,0]
-    UQstar_lst = [] 
-    for ind, [polpar, stackmask, oldembulcorn, newembulcorn] in enumerate(zip([U_stacked, Q_stacked],
-                                                                              [Umask,Qmask],
-                                                                              [Uoldembuplcorn,
-                                                                               Qoldembuplcorn],
-                                                                              [Unewembuplcorn,
-                                                                               Qnewembuplcorn])):
-        
-        # Recalibrate the box centers and the stacking mask
-        apcents_cal = np.array(circaps)[:,0:2] - (newembulcorn-oldembulcorn)[[1,0]]
-        stackmask_cal = stackmask[oldembulcorn[0]:oldembulcorn[0]+I.shape[0],
-                                  oldembulcorn[1]:oldembulcorn[1]+I.shape[1]]
-        
-        # Determine regional counts
-        polstar_lst = []
-        for stellarnr in range(len(circaps)):
-            
-            # Select aperture center and radius
-            apcent, apR = apcents_cal[stellarnr], np.array(circaps)[stellarnr,2]
-            # Determine the regional masks
-            _, starmask = polfun.cmask(I, apcent, apR)
-            starmask_cal = polfun.mask2d(starmask,stackmask_cal)
-            # Extract counts
-            temp = polpar[starmask_cal]
-            polstar_lst.append(temp)
-            
-            # Diagnostic plot
-            '''
-            plt.imshow(polfun.mask2d(I, stackmask_cal), origin='lower', cmap='afmhot', alpha=0.5)
-            plt.imshow(starmask_cal, origin='lower', cmap='Greys', alpha=0.5)#, alpha=0.5)
-            #plt.scatter(center[0], center[1], color='k', s=50)
-            plt.show()
-            plt.close()
-            '''
-            
-        # Append to list
-        UQstar_lst.append(np.array(polstar_lst))
-    
-    
-    
-    
-    
-    # Create filament histograms for U/I and Q/I
-    filUQcolors = np.array([['#660000','#000066'], ['#ff0000','#0033cc'], ['#cc3300','#0099cc'], 
-                            ['#ff6600','#00cc66'], ['#ff9933','#009933'], ['#ffcc00','#003300']])
-    polparlabs, suffixes = [r"U", r"Q", r"$P_L$ [%]"], ["U", "Q", "P"]
-    # Set up  new figure
-    fig, axarr = plt.subplots(5, sharex=True)
-    # Set bin ranges and initialize maximum frequency arrays
-    binrange, nrbins, maxfreqs = (-0.1,0.1), 21, np.zeros(6)  
-    # Initialize array for storing U and Q means and variances per filament
-    UQfil_mv = np.tile(np.nan, [2,5,2])
-    for ind in range(2): 
-        
-        # Plot Stokes paramter for each selected region
-        UQPhists = []
-        for filNR, poldata in enumerate(UQfil_lst[ind]): 
-            
-            #weights = np.ones_like(poldata)/float(len(poldata))
-            hist, bins = np.histogram(poldata, range=binrange, bins=nrbins)#, weights=weights)
-            bincents = (bins[:-1] + bins[1:]) / 2
-            axarr[filNR].bar(bincents, hist, color=filUQcolors[filNR,ind], alpha=0.5, 
-                             align='center', width=0.7*(bins[1]-bins[0]), 
-                             label=r"X={}".format(polparlabs[ind]))
-            '''
-            n, bins, patches = axarr[filNR].hist(poldata, color=filcolors[filNR], range=binrange, 
-                                     weights=weights, bins=nrbins, label=r"Filament {}".format(filNR))
-            bincenters = 0.5*(bins[1:]+bins[:-1])
-            '''
-            # Plot Gaussian fit
-            mean, var = np.mean(poldata), np.var(poldata)
-            UQfil_mv[ind,filNR,:] = [mean,var] # Append to array
-            pdf_x = np.linspace(np.min(poldata), np.max(poldata), 100)
-            pdf_y = (1./np.sqrt(2*np.pi*var)) * np.exp((-0.5*(pdf_x-mean)**2) / var)
-            axarr[filNR].plot(pdf_x, pdf_y, 'k--')
-            combfreqs = np.concatenate([pdf_y,hist])
-            axarr[filNR].set_yticks(np.linspace(0, 1.2*np.max(combfreqs).astype(int), 4))
-            axarr[filNR].set_yticks(np.linspace(0, 1.2*np.max(pdf_y).astype(int), 4))            
-            axarr[filNR].legend(loc='upper left')
-            plt.grid()
-            #axarr[filNR].set_title(r"Filament {}".format(filNR+1))
-            #axarr[filNR].legend(loc='upper right')
+            # Determine box center and size in arcseconds
+            boxcentarcs = np.array([scapexslitarcs[boxcent[0]], scapeyslitarcs[boxcent[1]]])
+            boxsizearcs = .126*boxsize
+            # Rotate lower left corner to correct position
+            rotmatrix = np.array([[np.cos(boxrot),-np.sin(boxrot)],
+                                  [np.sin(boxrot),np.cos(boxrot)]])  
+            boxlowleftarcs_rot = np.matmul(rotmatrix, -.5*boxsizearcs) + boxcentarcs
+            print(boxlowleftarcs_rot)
+            # Plot box
+            axarr[tempind][0].add_patch( patches.Rectangle(boxlowleftarcs_rot, 
+                                                           boxsizearcs[0], boxsizearcs[1],
+                                                           angle=boxrot, fill=False, 
+                                                           color='b', linewidth=3) )
 
-    axarr[2].set_ylabel(r"Frequency", fontsize=20)
-    axarr[4].set_xlabel(r"X/I", fontsize=20)
-    axarr[0].set_title(r"Filament stokes distribution", fontsize=26)    
-    #plt.tight_layout()
-    plt.savefig(pltsavedir + "/filhists{}_i{}.png".format(suffixes[ind], i+1))
-    plt.show()
-    plt.close() 
-    
-    
-    
-    
-    
-    # Create stellar histograms for U/I and Q/I
-    starUQcolors = np.array([['#660000','#000066'], ['#ff0000','#0033cc'], ['#cc3300','#0099cc'], 
-                            ['#ff6600','#00cc66'], ['#ff9933','#009933'], ['#ffcc00','#003300']])
-    polparlabs, suffixes = [r"U", r"Q", r"$P_L$ [%]"], ["U", "Q", "P"]
-    # Set up  new figure
-    fig, axarr = plt.subplots(6, sharex=True)
-    # Set bin ranges and initialize maximum frequency arrays
-    binrange, nrbins, maxfreqs = (-0.1,0.1), 21, np.zeros(6)
-    UQstar_mv = np.tile(np.nan, [2,6,2])
-    for ind in range(2): 
-        
-        # Plot Stokes paramter for each selected region
-        for starNR, poldata in enumerate(UQstar_lst[ind]): 
-            
-            #weights = np.ones_like(poldata)/float(len(poldata))
-            hist, bins = np.histogram(poldata, range=binrange, bins=nrbins)#, weights=weights)
-            bincents = (bins[:-1] + bins[1:]) / 2
-            axarr[starNR].bar(bincents, hist, color=starUQcolors[starNR,ind], alpha=0.5, 
-                             align='center', width=0.7*(bins[1]-bins[0]), 
-                             label=r"X={}".format(polparlabs[ind]))
-            # Plot Gaussian fit
-            mean, var = np.mean(poldata), np.var(poldata)
-            UQstar_mv[ind,starNR,:] = [mean,var] # Append to array
-            pdf_x = np.linspace(np.min(poldata), np.max(poldata), 100)
-            pdf_y = (1./np.sqrt(2*np.pi*var)) * np.exp((-0.5*(pdf_x-mean)**2) / var)
-            axarr[starNR].plot(pdf_x, pdf_y, 'k--')
-            combfreqs = np.concatenate([pdf_y,hist])
-            axarr[starNR].set_yticks(np.linspace(0, 1.2*np.max(combfreqs).astype(int), 4))
-            axarr[starNR].legend(loc='upper left')
-            plt.grid()
+    # Plot normalized Stokes Q
+    imQb = axarr[0][1].imshow(stacked_fUQ[0][1][:,734:986], origin='lower', 
+                              cmap='afmhot', vmin=-.1, vmax=.1,
+                              extent=[np.min(scapexslitarcs[734:986]),
+                                      np.max(scapexslitarcs[734:986]),
+                                      np.min(scapeyslitarcs),np.max(scapeyslitarcs)])                
+    imQv = axarr[1][1].imshow(stacked_fUQ[1][1][:,734:986], origin='lower', 
+                              cmap='afmhot', vmin=-.1, vmax=.1,
+                              extent=[np.min(scapexslitarcs[734:986]),
+                                      np.max(scapexslitarcs[734:986]),
+                                      np.min(scapeyslitarcs),np.max(scapeyslitarcs)])
+    # Plot normalized Stokes Q
+    imUb = axarr[0][2].imshow(stacked_fUQ[0][0][:,734:986], origin='lower', 
+                              cmap='afmhot', vmin=-.1, vmax=.1,
+                              extent=[np.min(scapexslitarcs[734:986]),
+                                      np.max(scapexslitarcs[734:986]),
+                                      np.min(scapeyslitarcs),np.max(scapeyslitarcs)])
+    imUv = axarr[1][2].imshow(stacked_fUQ[1][0][:,734:986], origin='lower', 
+                              cmap='afmhot', vmin=-.1, vmax=.1,
+                              extent=[np.min(scapexslitarcs[734:986]),
+                                      np.max(scapexslitarcs[734:986]),
+                                      np.min(scapeyslitarcs),np.max(scapeyslitarcs)])
 
-    axarr[2].set_ylabel(r"Frequency", fontsize=20)
-    axarr[5].set_xlabel(r"X/I", fontsize=20)
-    axarr[0].set_title(r"Stellar stokes distribution", fontsize=26)    
+    # Set axes labels
+    rowtitlelocs = [0.75, 0.25]
+    panelrowtitles, panelcoltitles = [r"v_HIGH", r"b_HIGH"], [r"I", r"Q/I", r"U/I"]
+    for tempind in range(3):
+        axarr[0][tempind].set_title(panelcoltitles[tempind], fontsize=26)
+        axarr[1][tempind].set_xlabel(r"X [arcsec]", fontsize=20)
+
+    for tempind in range(2):
+        fig.text(0.03,rowtitlelocs[tempind], panelrowtitles[tempind], fontsize=26, 
+                 ha="center", va="center", rotation=90) 
+        axarr[tempind][0].set_ylabel(r"Y [arcsec]", fontsize=20)
+
+    # Add colorbars
+    '''
+    cbaxes1 = fig.add_axes([0.13, 0.02, 0.23, 0.03]) 
+    cb1 = plt.colorbar(imIb, orientation='horizontal', 
+                      cax = cbaxes1, ticks=np.round(np.arange(-10,110,20),0))  
+    fig.colorbar(imIb, cax=cbar_ax)      
+    '''                
+    cbaxes2 = fig.add_axes([0.4, 0.5, 0.5, 0.03]) 
+    cb2 = plt.colorbar(imQb, orientation='horizontal', 
+                      cax = cbaxes2, ticks=np.round(np.arange(-.1,.15,.05),2))  
+    fig.colorbar(imQb, cax=cbar_ax)
     #plt.tight_layout()
-    plt.savefig(pltsavedir + "/starhists{}_i{}.png".format(suffixes[ind], i+1))
+    plt.savefig(pltsavedir+"/UQ_i{}fALL".format(i+1,filternr+1))
     plt.show()
-    plt.close() 
+    plt.close()
     
     
     
     
     
     # Plot filamentary QvsU points
-    fig, ax = plt.subplots(1)
-    fig, ax = polfun.QvsU(fig, ax, [UQfil_mv[1,:,0],UQfil_mv[1,:,1],UQfil_mv[0,:,0],UQfil_mv[0,:,1]],
-                          PLPHI=[0.02,0.01,0,0], checkPphi=[True,False])
-    ax.set_xlabel(r"Q/I", fontsize=20), ax.set_ylabel(r"U/I", fontsize=20)                      
-    ax.set_title(r"Filament linear stokes", fontsize=26)
-    plt.savefig(pltsavedir + "/filUQ_i{}.png".format(i+1))
-    plt.show()
-    plt.close()
-
+    filtercolours = ['g', 'b']
+    offsangle_lst = 2.*np.array([1.80, 1.54]) #deg
+    for filternr in range(2):
+        if filternr == 0:
+            galcenttag = "Galactic center"
+        else:
+            galcenttag = None
+        fig, ax = plt.subplots(1)     
+        fig, ax = polfun.QvsU(fig, ax, 
+                              [fUQfil_mv[filternr,1,0,0],np.sqrt(fUQfil_mv[filternr,1,0,1]),
+                               fUQfil_mv[filternr,0,0,0],np.sqrt(fUQfil_mv[filternr,0,0,1])],
+                              offsetangle=offsangle_lst[filternr],
+                              colour='m', tag=galcenttag)     
+        fig, ax = polfun.QvsU(fig, ax, 
+                              [fUQfil_mv[filternr,1,1::,0],np.sqrt(fUQfil_mv[filternr,1,1::,1]),
+                               fUQfil_mv[filternr,0,1::,0],np.sqrt(fUQfil_mv[filternr,0,1::,1])],
+                              offsetangle=offsangle_lst[filternr],
+                              colour=filtercolours[filternr], 
+                              PLPHI=[0.02,0.01,0,0], checkPphi=[True,False], 
+                              tag="Dust filaments")
+        for filno in range(len(fUQfil_mv[0,0,:,0])):
+            filU, filQ = fUQfil_mv[filternr,:,filno,0]
+            ax.annotate(r'{}'.format(filno), xy=(filQ, filU), 
+                        xytext=(filQ+2e-3, filU+2e-3), fontsize=20)
+        
+        ax.grid()
+        ax.set_xlabel(r"Q/I", fontsize=20), ax.set_ylabel(r"U/I", fontsize=20)                      
+        ax.set_title(r"Filament linear stokes", fontsize=26)
+        ax.legend(loc='upper right', fancybox=True, framealpha=0.5)
+        plt.savefig(pltsavedir + "/filUQ_i{}f{}.png".format(i+1, filternr+1))
+        plt.show()
+        plt.close()
+    
+    
     # Plot stellar QvsU points
-    fig, ax = plt.subplots(1)
-    fig, ax = polfun.QvsU(fig, ax, [UQstar_mv[1,:,0],UQstar_mv[1,:,1],
-                                    UQstar_mv[0,:,0],UQstar_mv[0,:,1]])
-    ax.set_xlabel(r"Q/I", fontsize=20), ax.set_ylabel(r"U/I", fontsize=20)                      
-    ax.set_title(r"Stellar linear stokes", fontsize=26)
-    plt.savefig(pltsavedir + "/stellarUQ_i{}.png".format(i+1))
-    plt.show()
-    plt.close()    
-                
+    for filternr in range(2):
+        fig, ax = plt.subplots(1)
+        fig, ax = polfun.QvsU(fig, ax, 
+                              [fUQstar_mv[filternr,1,:,0],np.sqrt(fUQstar_mv[filternr,1,:,1]),
+                               fUQstar_mv[filternr,0,:,0],np.sqrt(fUQstar_mv[filternr,0,:,1])],
+                              colour=filtercolours[filternr])
+        
+        ax.grid()
+        ax.set_xlabel(r"Q/I", fontsize=20), ax.set_ylabel(r"U/I", fontsize=20)                      
+        ax.set_title(r"Stellar linear stokes", fontsize=26)
+        plt.savefig(pltsavedir + "/stellarUQ_i{}f{}.png".format(i+1, filternr+1))
+        plt.show()
+        plt.close()    
+    
+    
+    
+    
+    
+    
     '''
     QvsU(fig, ax, QU, offsetangle=0., PLPHI=np.zeros(4), checkPphi=[False,False], plot_inset=False, inset_ax=None, colour='b', tag=None):    
     
