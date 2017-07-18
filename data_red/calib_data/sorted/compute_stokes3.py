@@ -1,7 +1,7 @@
 import numpy as np
 import funct as polfun
 from astropy.io import fits
-from itertools import product as carthprod
+from itertools import product as cartprod
 import shutil
 import os
 import re
@@ -12,6 +12,7 @@ from photutils import Background2D, SigmaClip, MedianBackground
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import matplotlib.gridspec as gridspec
 from matplotlib import cm
 from scipy import interpolate
 from scipy.stats import poisson
@@ -84,7 +85,7 @@ pixscale = 0.126 #[arcsec/pixel]
 # Boolean variables for turning on/off the computations
 detsplines1d, detsplines2d = False, False
 detoverlaps1d, detoverlaps2d = True, True
-recompute_fluxlsts = False
+recompute_fluxlsts = True
 
 
 # Cut and append slits
@@ -494,23 +495,8 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
         Qoffsy = int(np.median(np.diff(slitoffs_JKs[J,[2,0],:,1],axis=0)))
         Uoffsx = int(np.median(np.diff(slitoffs_JKs[J,[3,1],:,0],axis=0)))
         Uoffsy = int(np.median(np.diff(slitoffs_JKs[J,[3,1],:,1],axis=0)))
-        
-        '''
-        xcoords_Ks = [m[0] for m in sorted(zip(xcoords_ks, retangles_k), key=lambda l: l[1])] 
-        ycoords_Ks = [m[0] for m in sorted(zip(ycoords_ks, retangles_k), key=lambda l: l[1])]
-        # Transform into arrays and append to list
-        xcoords_Ks, ycoords_Ks = np.array(xcoords_Ks), np.array(ycoords_Ks) 
-        xcoords_JKs.append(xcoords_Ks), ycoords_JKs.append(ycoords_Ks)
-        # Determine exposure-wise offsets
-        print("DEBUG Qoffsxlst:\t {}".format(np.diff(xcoords_Ks[[0,2]],axis=0)))
-        print("DEBUG Qoffsylst:\t {}".format(np.diff(ycoords_Ks[[0,2]],axis=0)))
-        print("DEBUG Uoffsxlst:\t {}".format(np.diff(xcoords_Ks[[1,3]],axis=0)))
-        print("DEBUG Uoffsylst:\t {}".format(np.diff(ycoords_Ks[[1,3]],axis=0)))
-        Qoffsx = int(np.median(np.diff(xcoords_Ks[[0,2]],axis=0)))
-        Qoffsy = int(np.median(np.diff(ycoords_Ks[[0,2]],axis=0)))
-        Uoffsx = int(np.median(np.diff(xcoords_Ks[[1,3]],axis=0)))
-        Uoffsy = int(np.median(np.diff(ycoords_Ks[[1,3]],axis=0)))
-        '''
+        QUoffsx = int(np.median(np.diff(slitoffs_JKs[J,[1,0],:,0],axis=0)))
+        QUoffsy = int(np.median(np.diff(slitoffs_JKs[J,[1,0],:,1],axis=0)))
         
         # Sort slit difference lists
         O_E__K = [m[0] for m in sorted(zip(O_Elst, retangles_k), key=lambda l: l[1])] 
@@ -534,6 +520,7 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
                                              np.nanmedian(np.sqrt(OplusE__K),axis=0), 
                                              offsxy0__45=[Qoffsx,Qoffsy], 
                                              offsxy22_5__67_5=[Uoffsx,Uoffsy], 
+                                             offsxy0__22_5=[QUoffsx, QUoffsy],
                                              corran=offsetangle)
         # Append results to list
         UQPphi_J.append(UQPphi), sigma_UQPphi_J.append(sigma_UQPphi)
@@ -582,21 +569,38 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
     ''' #TODO REMOVE
     # Stack exposures
     fUQstar_mv, fUQfil_mv = np.tile(np.nan, [2,2,6,2]), np.tile(np.nan, [2,2,5,2])
-    stacked_fUQ, fUQfil_lst, fUQstar_lst = [], [], []
     Vmask_J, Bmask_J = (filters_Jk[:,0]=="v_HIGH"), (filters_Jk[:,0]=="b_HIGH")
+    stacked_fUQPphi, fUQfil_lst, fUQstar_lst = [], [], []
     for filternr, [filtermask_J, filtername] in enumerate(zip([Vmask_J, Bmask_J],
                                                             ["v_HIGH", "b_HIGH"])):
         
         # Select all templates corresponding to current filter
-        U_J, Q_J = UQPphi_J[:,0], UQPphi_J[:,1]
+        U_J, Q_J, pL_J, phiL_J = UQPphi_J[:,0], UQPphi_J[:,1], UQPphi_J[:,2], UQPphi_J[:,3]
         slitoffs_JK = np.mean(slitoffs_JKs, axis=2)
+        '''
+        Istacked_K, Imask_K, Ioldembupcorn_K, Inewembuplcorn = [], [], [], []
+        for K in range(4):
+            Istacked, Imask, Ioldembuplcorn, Inewembuplcorn = polfun.stackim(
+                                                                          OplusE__JK[filtermask_J][K],
+                                                                          slitoffs_JK[filtermask_J,K],
+                                                                          returnmask=True)
+            Istacked_K.append(Istacked), Imask_K.append(Imask)
+            Ioldembupcorn_K.append(Ioldembuplcorn), Inewembuplcorn_K.append(Inewembuplcorn)
+        '''# TODO Maybe not necessary
         U_stacked, Umask, Uoldembuplcorn, Unewembuplcorn = polfun.stackim(U_J[filtermask_J],
                                                                           slitoffs_JK[filtermask_J,0],
                                                                           returnmask=True)
         Q_stacked, Qmask, Qoldembuplcorn, Qnewembuplcorn = polfun.stackim(Q_J[filtermask_J],
                                                                           slitoffs_JK[filtermask_J,1],
                                                                           returnmask=True)
-        stacked_fUQ.append([U_stacked, Q_stacked])
+        pL_stacked, pLmask, pLoldembuplcorn, pLnewembuplcorn = polfun.stackim(pL_J[filtermask_J],
+                                                                          slitoffs_JK[filtermask_J,1],
+                                                                          returnmask=True)
+        phiL_stacked, phiLmask, phiLoldembuplcorn, phiLnewembuplcorn = polfun.stackim(
+                                                                          phiL_J[filtermask_J],
+                                                                          slitoffs_JK[filtermask_J,1],
+                                                                          returnmask=True)
+        stacked_fUQPphi.append([U_stacked, Q_stacked, pL_stacked, phiL_stacked])
         # TODO Determine stacked array errors
         
         
@@ -680,63 +684,72 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
         # Append to list which distinguishes between filters
         fUQfil_lst.append(UQfil_lst)
         
-        
-        
-        
-        
-        # Create flattened array with the pixel values for the selected stellar regions
-        circaps = [[556,47,6],[453,33,4],[303,21,6],[1547,55,5],[1479,9,7],[1064,28,5]]
-        I = np.array(OplusE__JK)[0,0]
-        UQstar_lst = [] 
-        for ind, [polpar, stackmask, 
-                  oldembulcorn, newembulcorn] in enumerate(zip([U_stacked, Q_stacked],[Umask,Qmask],
-                                                               [Uoldembuplcorn, Qoldembuplcorn],
-                                                               [Unewembuplcorn, Qnewembuplcorn])):
-            
-            # Recalibrate the aperture centers and the stacking mask
-            apcents_cal = np.array(circaps)[:,0:2] - (newembulcorn-oldembulcorn)[[1,0]]
-            stackmask_cal = stackmask[oldembulcorn[0]:oldembulcorn[0]+I.shape[0],
-                                      oldembulcorn[1]:oldembulcorn[1]+I.shape[1]]
-            
-            # Determine regional counts
-            polstar_lst = []
-            for stellarnr in range(len(circaps)):
-                
-                # Select aperture center and radius
-                apcent, apR = apcents_cal[stellarnr], np.array(circaps)[stellarnr,2]
-                # Determine the regional masks
-                _, starmask = polfun.cmask(I, apcent, apR)
-                starmask_cal = polfun.mask2d(starmask,stackmask_cal)
-                # Extract counts
-                temp = polpar[starmask_cal]
-                polstar_lst.append(temp)
-                
-                # Diagnostic plot
-                '''
-                plt.imshow(polfun.mask2d(I, stackmask_cal), origin='lower', cmap='afmhot', alpha=0.5)
-                plt.imshow(starmask_cal, origin='lower', cmap='Greys', alpha=0.5)#, alpha=0.5)
-                #plt.scatter(center[0], center[1], color='k', s=50)
-                plt.show()
-                plt.close()
-                '''
-                
-            # Append to list specifying U and Q for each star
-            UQstar_lst.append(np.array(polstar_lst))
-        # Append to list which distinguishes between filters
-        fUQstar_lst.append(np.array(UQstar_lst))
-        
-    
-    
     # Save the intermediate results
-    polfun.savenp(stacked_fUQ, datasavedir, "stacked_fUQ")
+    polfun.savenp(stacked_fUQPphi, datasavedir, "stacked_fUQPphi")
     polfun.savenp(fUQfil_lst, datasavedir, "fUQfil_lst")
-    polfun.savenp(fUQstar_lst, datasavedir, "fUQstar_lst")
     
     
     
     
-           
+    # Plot I, Qbar, Ubar next to each other for both b and v
+    exptimev, exptimeb = exptimes_JK[[0,4],0]
+    # Define plot arrays
+    axarrs = np.tile(np.nan, [2,2,3]), imswinds = np.tile(np.nan, [2,2,3])
+    gs1 = gridspec.GridSpec(2,3), gs2 = gridspec.GridSpec(2,3)
+    gs1.update(right=0.95, up=0.95, left=0.05, down=0.55, wspace=0.05)
+    gs2.update(right=0.95, up=0.45, left=0.05, down=0.05, wspace=0.05)
+    # Define plotdata array
+    pltarr = np.array([[ [OplusE__JK[0][0]/exptimev, stacked_fUQPphi[0][1], stacked_fUQPphi[0][0]], 
+                          [np.nan, stacked_fUQPphi[0][2], stacked_fUQPphi[0][3]] ],
     
+                        [ [OplusE__JK[4][0]/exptimeb, stacked_fUQPphi[1][1], stacked_fUQPphi[1][0]], 
+                          [np.nan, stacked_fUQPphi[1][2], stacked_fUQPphi[1][3]] ]])
+    # Set color scale ranges
+    vminarr, vmaxarr = np.tile(-.1, [2,2,3]), np.tile(.1, [2,2,3])
+    vminarr[:,0,0] = -10/np.array([exptimev,exptimev]) 
+    vmaxarr[:,0,0] = 100/np.array([exptimev,exptimev])
+    
+    # Plot data
+    for gridspecnr, [gridspec,axarr,imswind] in enumerate([gs1,gs2],[axarr1,axarr2]):
+        for pltrownr, pltcolnr in cartprod(range(2),range(3)):
+            if not (pltrownr == 1 and pltcolnr == 0): 
+                axarrs[gridspecnr,pltrownr,pltcolnr] = plt.subplot(gridspec[pltrownr:plotrownr+1, 
+                                                                   pltcolnr:pltcolnr+1])
+                imswinds[gridspecnr,pltrownr,pltcolnr] = axarr[gridspecnr,pltrownr,pltcolnr].imshow(
+                                                               pltarr[0,pltrownr,pltcolnr][734:986], 
+                                                               origin='lower', cmap='afmhot',
+                                                        vmin=vminarr[gridspecnr,pltrownr,pltcolnr],
+                                                        vmax=vmaxarr[gridspecnr,pltrownr,pltcolnr], 
+                                                        extent=[np.min(scapexslitarcs[734:986]),
+                                                                np.max(scapexslitarcs[734:986]),
+                                                np.min(scapeyslitarcs),np.max(scapeyslitarcs)])
+                '''
+                if pltrownr != 1:
+                    plt.setp(axarrs[gridspecnr,pltrownr,pltcolnr].get_xticklabels(), visible=False) 
+                if pltcolnr != 0:
+                    plt.setp(axarrs[gridspecnrpltrownr,pltcolnr].get_yticklabels(), visible=False) 
+                else:
+                    axarrs[]
+                ''' #TODO REMOVE tick labels for non-boundary windows?
+                
+        # DoLP color bar
+        cbaxes1 = gridspec.add_axes([0.03, 0.33, 0.2, 0.03]) 
+        cb1 = plt.colorbar(imswind1[0,1], orientation='horizontal', 
+                           cax = cbaxes1, ticks=np.round(np.arange(-.1,.15,.05),2))  
+        #        plt.colorbar(imswinds[0,0,1], cax=cbar_ax)   
+        # AoLP color bar
+        cbaxes2 = gridspec.add_axes([0.03, 0.03, 0.2, 0.03]) 
+        cb2 = plt.colorbar(imswind1[], orientation='horizontal', 
+                           cax = cbaxes1, ticks=np.round(np.arange(-180,180,60),0))  
+        #        plt.colorbar(imswinds[0,1,2], cax=cbar_ax)   
+        
+    plt.savefig(pltsavedir+"/UQ_i{}fALLv2".format(i+1,filternr+1))
+    plt.show()
+    plt.close()
+    
+    
+    
+    '''
     # Plot I, Qbar, Ubar next to each other for both b and v
     fig, axarr = plt.subplots(2, 3, sharex='col', sharey='row', figsize=(15,8))
     # Plot total intensities
@@ -750,42 +763,26 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
                               cmap='afmhot', vmin=-10/exptimeb, vmax=100/exptimeb, 
                               extent=[np.min(scapexslitarcs[734:986]),
                                       np.max(scapexslitarcs[734:986]),
-                                      np.min(scapeyslitarcs),np.max(scapeyslitarcs)])
-    # Plot filament boundaries
-    for tempind in range(2):
-        for boxnr, [boxcent, boxsize, boxrot] in enumerate(zip(boxcents_cal,boxsizes,boxrots)):
-            # Determine box center and size in arcseconds
-            boxcentarcs = np.array([scapexslitarcs[boxcent[0]], scapeyslitarcs[boxcent[1]]])
-            boxsizearcs = .126*boxsize
-            # Rotate lower left corner to correct position
-            rotmatrix = np.array([[np.cos(boxrot),-np.sin(boxrot)],
-                                  [np.sin(boxrot),np.cos(boxrot)]])  
-            boxlowleftarcs_rot = np.matmul(rotmatrix, -.5*boxsizearcs) + boxcentarcs
-            print(boxlowleftarcs_rot)
-            # Plot box
-            axarr[tempind][0].add_patch( patches.Rectangle(boxlowleftarcs_rot, 
-                                                           boxsizearcs[0], boxsizearcs[1],
-                                                           angle=boxrot, fill=False, 
-                                                           color='b', linewidth=3) )
-
+                                      np.min(scapeyslitarcs),np.max(scapeyslitarcs)])    
+    
     # Plot normalized Stokes Q
-    imQb = axarr[0][1].imshow(stacked_fUQ[0][1][:,734:986], origin='lower', 
+    imQb = axarr[0][1].imshow(stacked_fUQPphi[0][1][:,734:986], origin='lower', 
                               cmap='afmhot', vmin=-.1, vmax=.1,
                               extent=[np.min(scapexslitarcs[734:986]),
                                       np.max(scapexslitarcs[734:986]),
                                       np.min(scapeyslitarcs),np.max(scapeyslitarcs)])                
-    imQv = axarr[1][1].imshow(stacked_fUQ[1][1][:,734:986], origin='lower', 
+    imQv = axarr[1][1].imshow(stacked_fUQPphi[1][1][:,734:986], origin='lower', 
                               cmap='afmhot', vmin=-.1, vmax=.1,
                               extent=[np.min(scapexslitarcs[734:986]),
                                       np.max(scapexslitarcs[734:986]),
                                       np.min(scapeyslitarcs),np.max(scapeyslitarcs)])
     # Plot normalized Stokes Q
-    imUb = axarr[0][2].imshow(stacked_fUQ[0][0][:,734:986], origin='lower', 
+    imUb = axarr[0][2].imshow(stacked_fUQPphi[0][0][:,734:986], origin='lower', 
                               cmap='afmhot', vmin=-.1, vmax=.1,
                               extent=[np.min(scapexslitarcs[734:986]),
                                       np.max(scapexslitarcs[734:986]),
                                       np.min(scapeyslitarcs),np.max(scapeyslitarcs)])
-    imUv = axarr[1][2].imshow(stacked_fUQ[1][0][:,734:986], origin='lower', 
+    imUv = axarr[1][2].imshow(stacked_fUQPphi[1][0][:,734:986], origin='lower', 
                               cmap='afmhot', vmin=-.1, vmax=.1,
                               extent=[np.min(scapexslitarcs[734:986]),
                                       np.max(scapexslitarcs[734:986]),
@@ -803,13 +800,7 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
                  ha="center", va="center", rotation=90) 
         axarr[tempind][0].set_ylabel(r"Y [arcsec]", fontsize=20)
 
-    # Add colorbars
-    '''
-    cbaxes1 = fig.add_axes([0.13, 0.02, 0.23, 0.03]) 
-    cb1 = plt.colorbar(imIb, orientation='horizontal', 
-                      cax = cbaxes1, ticks=np.round(np.arange(-10,110,20),0))  
-    fig.colorbar(imIb, cax=cbar_ax)      
-    '''                
+    # Add colorbars           
     cbaxes2 = fig.add_axes([0.4, 0.5, 0.5, 0.03]) 
     cb2 = plt.colorbar(imQb, orientation='horizontal', 
                       cax = cbaxes2, ticks=np.round(np.arange(-.1,.15,.05),2))  
@@ -818,7 +809,7 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
     plt.savefig(pltsavedir+"/UQ_i{}fALL".format(i+1,filternr+1))
     plt.show()
     plt.close()
-    
+    '''
     
     
     

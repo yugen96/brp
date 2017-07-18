@@ -1736,7 +1736,8 @@ def detslitdiffnorm(slitpair, pixoffs, suboffs_i, savefigs=False,
 # Function for determining linear Stokes parameters and polarization degrees and angles
 # in each pixel of a given set of slits slitdiffnorm_lst 
 # (containing 4 exposures with different retarder angles: 0, 22.5, 45 and 67.5 degree)
-def detpol(slitdiffnorm_lst, S_N, offsxy0__45=np.zeros(2), offsxy22_5__67_5=np.zeros(2), corran=0.):
+def detpol(slitdiffnorm_lst, S_N, corran=0., 
+           offsxy0__45=np.zeros(2), offsxy22_5__67_5=np.zeros(2), offsxy0__22_5=np.zeros(2)):
     
     # Extract different retangle exposures
     [slitdiffnorm0, slitdiffnorm22_5,
@@ -1756,7 +1757,8 @@ def detpol(slitdiffnorm_lst, S_N, offsxy0__45=np.zeros(2), offsxy22_5__67_5=np.z
         
     # Compute double differences
     Q_norm = 0.5*slitdiffnorm0 - 0.5*slitdiffnorm45
-    U_norm = 0.5*slitdiffnorm22_5 - 0.5*slitdiffnorm67_5    
+    U_norm = 0.5*slitdiffnorm22_5 - 0.5*slitdiffnorm67_5   
+    # Reshape to original slit size 
     if np.sum(offsxy0__45 != np.zeros(2)) != 0:
         Q_norm = Q_norm[lowlcorn[0]:lowlcorn[0]+slitshape[0],
                         lowlcorn[1]:lowlcorn[1]+slitshape[1]]
@@ -1766,7 +1768,8 @@ def detpol(slitdiffnorm_lst, S_N, offsxy0__45=np.zeros(2), offsxy22_5__67_5=np.z
     # Determine error margins (see Bagnulo 2009 appendix formulae A14 and A15)
     sigmaQ_norm = (1/(2*np.sqrt(len(slitdiffnorm_lst))) / S_N)
     sigmaU_norm = (1/(2*np.sqrt(len(slitdiffnorm_lst))) / S_N)    
-    print("DEBUG in detpol Q^2 + U^2 - sigma_Q^2:\t{}".format(U_norm**2 + Q_norm**2 - sigmaU_norm**2))
+    print("DEBUG in detpol Q^2 + U^2 - sigma_Q^2:\t{}".format(U_norm**2 + Q_norm**2 
+                                                                        - sigmaU_norm**2))
     
     # Diagnostic plot (check exposure alignment)
     plt.imshow(U_norm - Q_norm, origin='lower', vmin=-1, vmax=1)
@@ -1775,18 +1778,40 @@ def detpol(slitdiffnorm_lst, S_N, offsxy0__45=np.zeros(2), offsxy22_5__67_5=np.z
     plt.close()
     
     
+    # Align Q and U
+    if np.sum(offsxy0__22_5 != np.zeros(2)) != 0:
+        Q_normemb = embed(Q_norm, framesize, offset=offsxy0__22_5, cornerpix=lowlcorn)
+        U_normemb = embed(U_norm, framesize, cornerpix=lowlcorn)
+        sigmaQ_normemb = embed(sigmaQ_norm, framesize, offset=offsxy0__22_5, cornerpix=lowlcorn)
+        sigmaU_normemb = embed(sigmaU_norm, framesize, cornerpix=lowlcorn)  
+              
     # Determine degree and angle of linear polarization
-    pL = np.sqrt(U_norm**2 + Q_norm**2)
-    phiL = 0.5 * np.arctan(U_norm/Q_norm) #radians
-    phiL_DEG = (180/np.pi)*phiL + corran #deg
+    pLemb = np.sqrt(U_normemb**2 + Q_normemb**2)
+    phiLemb = 0.5 * np.arctan(U_normemb/Q_normemb) #radians
+    
     
     # Determine error margins (see Bagnulo 2009 appendix formulae A14 and A15)
-    sigma_pL = np.sqrt( (np.cos(2*phiL))**2 * sigmaQ_norm**2 + 
-                        (np.sin(2*phiL))**2 * sigmaU_norm**2 )
-    temp = np.sqrt( (np.sin(2*phiL))**2 * sigmaQ_norm**2 + 
-                    (np.cos(2*phiL))**2 * sigmaU_norm**2 ) #NOTE: different from sigma_pL
-    sigma_phiL = 1./2. * ( temp / pL ) #rad
-    sigma_phiL_DEG = (180./np.pi) * sigma_phiL #deg
+    sigma_pLemb = np.sqrt( (np.cos(2*phiL))**2 * sigmaQ_normemb**2 + 
+                        (np.sin(2*phiL))**2 * sigmaU_normemb**2 )
+    temp = np.sqrt( (np.sin(2*phiL))**2 * sigmaQ_normemb**2 + 
+                    (np.cos(2*phiL))**2 * sigmaU_normemb**2 ) #NOTE: different from sigma_pL
+    sigma_phiLemb = 1./2. * ( temp / pL ) #rad
+
+    
+    
+    # Reshape to original slit size 
+    if np.sum(offsxy0__22_5 != np.zeros(2)) != 0:
+        pL = pLemb[lowlcorn[0]:lowlcorn[0]+slitshape[0],
+                   lowlcorn[1]:lowlcorn[1]+slitshape[1]]
+        phiL = pLemb[lowlcorn[0]:lowlcorn[0]+slitshape[0],
+                        lowlcorn[1]:lowlcorn[1]+slitshape[1]] #radians       
+        sigma_pL = sigma_pLemb[lowlcorn[0]:lowlcorn[0]+slitshape[0],
+                               lowlcorn[1]:lowlcorn[1]+slitshape[1]]
+        sigma_phiL = sigma_phiLemb[lowlcorn[0]:lowlcorn[0]+slitshape[0],
+                                   lowlcorn[1]:lowlcorn[1]+slitshape[1]]
+    # Rescale to degrees
+    phiL_DEG = (180/np.pi)*phiL + corran #deg     
+    sigma_phiL_DEG = (180./np.pi) * sigma_phiL #deg              
     
     return([U_norm, Q_norm, pL, phiL_DEG], [sigmaQ_norm, sigmaU_norm, sigma_pL, sigma_phiL_DEG])
     
