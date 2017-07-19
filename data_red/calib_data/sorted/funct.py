@@ -1784,31 +1784,47 @@ def detpol(slitdiffnorm_lst, S_N, corran=0.,
         U_normemb = embed(U_norm, framesize, cornerpix=lowlcorn)
         sigmaQ_normemb = embed(sigmaQ_norm, framesize, offset=offsxy0__22_5, cornerpix=lowlcorn)
         sigmaU_normemb = embed(sigmaU_norm, framesize, cornerpix=lowlcorn)  
-              
-    # Determine degree and angle of linear polarization
-    pLemb = np.sqrt(U_normemb**2 + Q_normemb**2)
-    phiLemb = 0.5 * np.arctan(U_normemb/Q_normemb) #radians
+    else: 
+        [Q_normemb, U_normemb, 
+         sigmaQ_normemb, sigmaU_normemb] = [Q_norm, U_norm, sigmaQ_norm, sigmaU_norm]
     
+    
+    # Determine degree and angle of linear polarization
+    pL = np.sqrt(U_normemb**2 + Q_normemb**2)
+    phiL = 0.5 * np.arctan(U_normemb/Q_normemb) #radians                    
+                       
     
     # Determine error margins (see Bagnulo 2009 appendix formulae A14 and A15)
-    sigma_pLemb = np.sqrt( (np.cos(2*phiL))**2 * sigmaQ_normemb**2 + 
+    sigma_pL = np.sqrt( (np.cos(2*phiL))**2 * sigmaQ_normemb**2 + 
                         (np.sin(2*phiL))**2 * sigmaU_normemb**2 )
     temp = np.sqrt( (np.sin(2*phiL))**2 * sigmaQ_normemb**2 + 
                     (np.cos(2*phiL))**2 * sigmaU_normemb**2 ) #NOTE: different from sigma_pL
-    sigma_phiLemb = 1./2. * ( temp / pL ) #rad
-
+    sigma_phiL = 1./2. * ( temp / pL ) #rad
     
     
     # Reshape to original slit size 
     if np.sum(offsxy0__22_5 != np.zeros(2)) != 0:
-        pL = pLemb[lowlcorn[0]:lowlcorn[0]+slitshape[0],
-                   lowlcorn[1]:lowlcorn[1]+slitshape[1]]
-        phiL = pLemb[lowlcorn[0]:lowlcorn[0]+slitshape[0],
-                        lowlcorn[1]:lowlcorn[1]+slitshape[1]] #radians       
-        sigma_pL = sigma_pLemb[lowlcorn[0]:lowlcorn[0]+slitshape[0],
-                               lowlcorn[1]:lowlcorn[1]+slitshape[1]]
-        sigma_phiL = sigma_phiLemb[lowlcorn[0]:lowlcorn[0]+slitshape[0],
-                                   lowlcorn[1]:lowlcorn[1]+slitshape[1]]
+        pL = pL[lowlcorn[0]:lowlcorn[0]+slitshape[0],
+                lowlcorn[1]:lowlcorn[1]+slitshape[1]]
+        phiL = phiL[lowlcorn[0]:lowlcorn[0]+slitshape[0],
+                    lowlcorn[1]:lowlcorn[1]+slitshape[1]]  
+        sigma_pL = pL[lowlcorn[0]:lowlcorn[0]+slitshape[0],
+                      lowlcorn[1]:lowlcorn[1]+slitshape[1]]
+        sigma_phiL = phiL[lowlcorn[0]:lowlcorn[0]+slitshape[0],
+                          lowlcorn[1]:lowlcorn[1]+slitshape[1]]              
+   
+   
+    # Diagnostic plot
+    '''
+    print("DEBUG detpol:\t\t{}\t{}".format(Q_normemb.shape, U_normemb.shape))
+    testfig, [ax1,ax2] = plt.subplots(2)
+    test1 = ax1.imshow(pL, vmin=-.2, vmax=.2, origin='lower', cmap="jet")
+    plt.colorbar(test1)
+    plt.show()
+    plt.close()
+    '''
+                             
+                
     # Rescale to degrees
     phiL_DEG = (180/np.pi)*phiL + corran #deg     
     sigma_phiL_DEG = (180./np.pi) * sigma_phiL #deg              
