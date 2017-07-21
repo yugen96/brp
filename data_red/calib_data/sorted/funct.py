@@ -1887,6 +1887,20 @@ def createrectmask(data, boxcent, boxsizs, theta):
     return(data[rectmask], rectmask)
     
 
+
+# Function for producing sersic galactic instensity profile
+def sersic(I0, center, k, n):
+    
+    rowgrid, colgrid = np.meshgrid(np.arange(I0.shape[0], np.arange(I0.shape[1])))
+    R = np.sqrt((rowgrid-center[1])**2+(colgrid-center[0])**2)
+    I = I0*np.exp(-k * R**(1/n))
+    
+    return(I)
+    
+    
+    
+    
+
 #################### END FUNCTIONS FOR SLIT APPENDAGE ####################
 #################### END FUNCTIONS #############################################
 
