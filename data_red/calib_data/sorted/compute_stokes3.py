@@ -186,6 +186,7 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
         tpl_dir = objdir + '/' + tpl_name
         print("DEBUG:\t{}".format(J))
         
+        
         # Load or recompute intermediate results
         if not recompute_fluxlsts:
             UQPphi_J = np.load(datasavedir+"/UQPphi__i{}JK.npy".format(i+1))
@@ -254,31 +255,13 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
             Oylow, Oyup = lowedges[3], upedges[3]            
             slitsNGC = [slits[2],slits[3]]
             slitE, slitO = slitsNGC
-            
+
+
             # Subtract backgrounds
             imcorr_lst, bgsavenames = [], ["E","O"]
             for s, im in enumerate([slitE,slitO]):
                 bkg_mean, bkg_median, bkg_std = sigma_clipped_stats(im, sigma=3.0, iters=10)
                 print("DEBUG background:\t{}, {}, {}".format(bkg_mean, bkg_median, bkg_std))
-                #sigma_clip = SigmaClip(sigma=3., iters=10)
-                
-                
-                '''
-                bkg_estimator = MedianBackground()
-                bkg = Background2D(im, (20, 20), filter_size=(8,8),
-                                       sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
-                
-                for q in [8]:
-                    bkg = Background2D(im, (20, 20), filter_size=(q, q),
-                                       sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
-                    if k+1 == 1:
-                        polfun.savefits(bkg.background, imsavedir+"/temp", 
-                                        "bg{}{}_j{}k{}".format(bgsavenames[s],q,j+1,k+1))
-                        polfun.savefits(im - bkg.background, imsavedir+"/temp", 
-                                        "{}-bg{}{}_j{}k{}".format(bgsavenames[s],bgsavenames[s],q,j+1,k+1))
-                        polfun.savefits(im, imsavedir+"/temp", 
-                                "{}_j{}k{}".format(bgsavenames[s],j+1,k+1))
-                '''
                 
                 polfun.savefits(im, imsavedir+"/tpl{}/exp{}".format(j+1,k+1), 
                                 "{}_j{}k{}".format(bgsavenames[s],j+1,k+1))
@@ -392,38 +375,32 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
             
             print("DEBUG cdoptoffs_star25(newnr18):\t{}, {}".format(cdintp_xy[0][21,302], 
                                                                     cdintp_xy[1][21,302]))
+                
             
             
             # Determine pixel-by-pixel Stokes parameters
-            noncorr_lst = polfun.detslitdiffnorm([slitE,slitO], 
-                                                 pixoffs=pixoffxy, suboffs_i=cdintp_xy, 
-                                                 savefigs=True, 
-                                                 plotdirec = pltsavedir+
-                                                             "/tpl{}/exp{}".format(j+1,k+1),
-                                                 imdirec = imsavedir+
-                                                           "/tpl{}/exp{}".format(j+1,k+1),
-                                                 suffix = "_NONbgCORj{}k{}slitp{}".format(j+1,k+1,1))
             O_E, OplusE, O_E_grad = polfun.detslitdiffnorm([Ecorr,Ocorr], 
-                                                          pixoffs=pixoffxy, suboffs_i=cdintp_xy, 
-                                                          savefigs=True, 
-                                                          plotdirec = pltsavedir+
-                                                                      "/tpl{}/exp{}".format(j+1,k+1),
-                                                          imdirec = imsavedir+
-                                                                    "/tpl{}/exp{}".format(j+1,k+1),
-                                                          suffix = "_j{}k{}slitp{}".format(j+1,k+1,1))
-            
-            
+                                                      pixoffs=pixoffxy, suboffs_i=cdintp_xy, 
+                                                      savefigs=True, 
+                                                      plotdirec = pltsavedir+
+                                                            "/tpl{}/exp{}".format(j+1,k+1),
+                                                      imdirec = imsavedir+
+                                                            "/tpl{}/exp{}".format(j+1,k+1),
+                                                      suffix = "_j{}k{}slitp{}".format(j+1,k+1,1))
+        
+        
             # Diagnostic plot
             '''
             f, axarr = plt.subplots(2, sharex=True)
             O_Eplt= axarr[0].imshow(O_E, origin='lower', cmap='afmhot', vmin=-1, vmax=1)
             axarr[0].set_title('O_E')
-            O_E_gradplt = axarr[1].imshow(O_E_grad, origin='lower', cmap='afmhot', vmin=-1, vmax=1)
+            O_E_gradplt = axarr[1].imshow(O_E_grad, origin='lower', cmap='afmhot', 
+                                          vmin=-1, vmax=1)
             axarr[1].set_title('O-E-grad')
             #plt.show()
             plt.close()
             '''
-            
+        
             # Append to lists
             O_Elst.append(O_E), OplusElst.append(OplusE), O_E_gradlst.append(O_E_grad)
             
@@ -582,12 +559,19 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
             xcent, ycent = float(templst[0].split('(')[1]), float(templst[1])
             parms.append([xcent,ycent])
             if filenr == 1:
-                size, angle = float(templst[2]), float(templst[3].split(")")[0])
-                parms[linenr-3].extend([size,angle])
+                sizex, sizey = float(templst[2]), float(templst[3])
+                angle =  float(templst[4].split(")")[0])
+                parms[linenr-3].extend([sizex, sizey ,angle])
         
         # Sort parameter list according to ascending X-coordinate
-        parms = np.array([m[0] for m in sorted(zip(parms, np.array(parms)[:,0]), key=lambda l: l[1])])
-        parms_lst.append(parms)
+        parms = np.array(parms)
+        parms = np.array([m[0] for m in sorted(zip(parms, parms[:,0]), key=lambda l: l[1])])
+        minrowind = (parms[:,1]).argmin()
+        parms[minrowind::] = np.array([m[0] for m in sorted(zip(parms[minrowind::], 
+                                                                parms[minrowind::][:,1]), 
+                                                            key=lambda l: l[1])])
+        parms_lst.append(np.array(parms))
+
     # Extract lists
     contparms, boxparms = parms_lst   
     
@@ -610,7 +594,7 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
     # Stack exposures
     fUQfil_mv = np.tile(np.nan, [2,2,21,2])
     Vmask_J, Bmask_J = (filters_Jk[:,0]=="v_HIGH"), (filters_Jk[:,0]=="b_HIGH")
-    stacked_fUQPphi, filMmasks_f, reghists_fUQ = [], [], []
+    stacked_fUQPphi, filMmasks_f, boxmasks_f, reghists_fUQ = [], [], [], []
     for filternr, [filtermask_J, filtername] in enumerate(zip([Vmask_J, Bmask_J],
                                                             ["v_HIGH", "b_HIGH"])):
         
@@ -660,38 +644,43 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
         
         
         # Create box region histogram statistics and mastermask
-        boxcents, boxsizes = boxparms[:,0:2], boxparms[:,2] #pix
-        boxrots = boxparms[:,3] #deg
+        boxcents, boxsizes = boxparms[:,0:2].astype(int), boxparms[:,2:4].astype(int) #pix
+        boxrots = boxparms[:,4] #deg
         I = np.array(OplusE__JK)[0,0]
-        
+
         # Recalibrate the box centers and the stacking mask
-        boxcents_cal = np.array(boxcents) - (newembulcorn-oldembulcorn)[[1,0]]
-        stackmask_cal = stackmask[oldembulcorn[0]:oldembulcorn[0]+I.shape[0],
-                                  oldembulcorn[1]:oldembulcorn[1]+I.shape[1]]
-        
+        '''
+        boxcents_cal = np.array(boxcents) - (pLnewembuplcorn-pLoldembuplcorn)[[1,0]]
+        stackmask_cal = pLmask[pLoldembuplcorn[0]:pLoldembuplcorn[0]+I.shape[0],
+                               pLoldembuplcorn[1]:pLoldembuplcorn[1]+I.shape[1]]
+        '''
+
         # Determine regional counts
-        filhist_lst, filmask_lst = [], []
-        for boxnr, [boxcent, boxsize, boxrot] in enumerate(zip(boxcents_cal,boxsizes,boxrots)):
+        boxhist_lst, boxmask_lst, valmask_lst = [], [], []
+        for boxnr, [boxcent, boxsize, boxrot] in enumerate(zip(boxcents,boxsizes,boxrots)):
             # Determine the regional masks
-            Imasked, filmask = polfun.createrectmask(polfun.mask2d(pL_stacked,stackmask_cal), 
+            Imasked, boxmask = polfun.createrectmask(pL_stacked, 
                                                      boxcent, boxsize, (np.pi/180)*boxrot)
-            filmask_lst.append(~filmask)
+            boxmask_lst.append(~boxmask)
             # Extract counts
-            temp = pL[filmask]
+            temp = pL_stacked[boxmask]
             # Determine count histograms
             hist, bins = np.histogram(temp, range=(-.02,.02), bins=41)
-            filhist_lst.append([hist,bins]) 
+            boxhist_lst.append([hist,bins]) 
             
             # Determine Gaussian fit to histogram (based on maximum likelihood)
             mean, var = np.mean(temp), np.var(temp) 
             print("Mean, var:\t{} , {}".format(mean, var))
-            valmask = (pL>(mean-var) & pL<(mean+var))
+            valmask = pL_stacked>(mean-np.sqrt(var))
             valmask_lst.append(~valmask)
-        
             
+            
+        # Store all box masks
+        boxmasks_f.append(boxmask_lst)
+        
         # Form 2Dmastermask (contains np.nan where non-filament and 1 where filament)
         valMmask = ~(np.prod(valmask_lst, axis=0).astype(int))
-        boxMmask = ~(np.prod(filmask_lst, axis=0).astype(int))
+        boxMmask = ~(np.prod(boxmask_lst, axis=0).astype(int))
         filMmask = np.where(boxMmask*valMmask==1, boxMmask*valMmask, np.nan)
         filMmasks_f.append(filMmask)
         
@@ -704,22 +693,30 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
     # Define plot arrays
     axarrs, imswinds = 2*[2*[3*[[]]]], 2*[2*[3*[[]]]]
     gs1, gs2 = gridspec.GridSpec(8,3), gridspec.GridSpec(8,3)
-    gs1.update(right=0.95, top=0.95, left=0.05, bottom=0.55, wspace=0.2)
-    gs2.update(right=0.95, top=0.45, left=0.05, bottom=0.05, wspace=0.2)
+    gs1.update(right=0.95, top=0.95, left=0.05, bottom=0.55, wspace=0.3, hspace=2)
+    gs2.update(right=0.95, top=0.45, left=0.05, bottom=0.05, wspace=0.3, hspace=2)
     # Define plotdata array
-    pltarr = np.array([[ [OplusE__JK[0][0]/exptimev, stacked_fUQPphi[0][1], stacked_fUQPphi[0][0]], 
-                          [np.nan, stacked_fUQPphi[0][2], stacked_fUQPphi[0][3] * filMmasks_f[0]] ],
+    stackshape = stacked_fUQPphi[0][1].shape
+    phiplot1 = stacked_fUQPphi[0][3] * filMmasks_f[0][0:stacked_fUQPphi[0][3].shape[0],
+                                                      0:stacked_fUQPphi[0][3].shape[1]]
+    phiplot2 = stacked_fUQPphi[1][3] * filMmasks_f[1][0:stacked_fUQPphi[1][3].shape[0],
+                                                      0:stacked_fUQPphi[1][3].shape[1]]
+    pltlst = [[ [np.arcsinh(OplusE__JK[0][0][0:stackshape[0],0:stackshape[1]]/exptimev), 
+                 stacked_fUQPphi[0][1], stacked_fUQPphi[0][0]], 
+                [np.nan, stacked_fUQPphi[0][2], phiplot1] ],
 
-                        [ [OplusE__JK[4][0]/exptimeb, stacked_fUQPphi[1][1], stacked_fUQPphi[1][0]], 
-                          [np.nan, stacked_fUQPphi[1][2], stacked_fUQPphi[1][3] * filMmasks_f[0]] ]])
+              [ [np.arcsinh(OplusE__JK[4][0][0:stackshape[0],0:stackshape[1]]/exptimeb), 
+                 stacked_fUQPphi[1][1], stacked_fUQPphi[1][0]], 
+                [np.nan, stacked_fUQPphi[1][2], phiplot2] ]]
+    plttitles = [2*[[ [r"I",r"Q/I",r"U/I"], [None, r"$P_L$", r"$\phi_L$"] ]]][0]
+
     # Set color maps
     colormaps = np.tile('afmhot', [2,2,3])
-    colormaps[:,:,0] = 'Greys'
+    colormaps[:,:,0], colormaps[:,1,2] = 'Greys', 'jet'
     # Set color range limits
-    vminarr, vmaxarr = np.tile(-.02, [2,2,3]), np.tile(.02, [2,2,3])
-    vminarr[:,0,0] = -10/np.array([exptimev,exptimev]) 
+    vminarr, vmaxarr = np.tile(-.015, [2,2,3]), np.tile(.015, [2,2,3])
+    vminarr[:,0,0] = -10/np.array([exptimev,exptimev])
     vmaxarr[:,0,0] = 150/np.array([exptimev,exptimev])
-    vminarr[:,1,1], vmaxarr[:,1,1] = -1,1
     vminarr[:,1,2], vmaxarr[:,1,2] = 0, 180
     
     # Plot data
@@ -730,14 +727,23 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
             if not (pltrownr == 1 and pltcolnr == 0): 
                 axarrs[gsnr][pltrownr][pltcolnr] = fig.add_subplot(grspec[gsrow:gsrow+4,gscol])
                 imswinds[gsnr][pltrownr][pltcolnr] = axarrs[gsnr][pltrownr][pltcolnr].imshow(
-                                                        pltarr[gsnr,pltrownr,pltcolnr][:,734:986],
+                                                        pltlst[gsnr][pltrownr][pltcolnr][:,734:936],
                                                         origin='lower', 
                                                         cmap=colormaps[gsnr,pltrownr,pltcolnr],
                                                         vmin=vminarr[gsnr,pltrownr,pltcolnr],
                                                         vmax=vmaxarr[gsnr,pltrownr,pltcolnr], 
-                                                        extent=[np.min(scapexslitarcs[734:986]),
-                                                                np.max(scapexslitarcs[734:986]),
+                                                        extent=[np.min(scapexslitarcs[734:936]),
+                                                                np.max(scapexslitarcs[734:936]),
                                                 np.min(scapeyslitarcs),np.max(scapeyslitarcs)])
+                
+                if pltrownr != 0:
+                    axarrs[gsnr][pltrownr][pltcolnr].set_xlabel(r"X [arcsec]", fontsize=20)
+                axarrs[gsnr][pltrownr][pltcolnr].set_ylabel(r"Y [arcsec]", fontsize=20)
+                axarrs[gsnr][pltrownr][pltcolnr].set_title(r"{}".format(
+                                                           plttitles[gsnr][pltrownr][pltcolnr]),
+                                                           fontsize=26)
+                if pltrownr == 0 and pltcolnr == 0:
+                    axarrs[gsnr][pltrownr][pltcolnr].set_xlabel(r"X [arcsec]", fontsize=20)
                 '''
                 if pltrownr != 1:
                     plt.setp(axarrs[gsnr,pltrownr,pltcolnr].get_xticklabels(), visible=False) 
@@ -746,54 +752,97 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
                 else:
                     axarrs[]
                 ''' #TODO REMOVE tick labels for non-boundary windows?
-                
+            
         # DoLP color bar
-        cbaxes1, cbaxes2 = plt.subplot(grspec[4,0]), plt.subplot(grspec[7,0])
-        cb1 = plt.colorbar(imswinds[0][0][2], orientation='horizontal', 
+        cbaxes1, cbaxes2 = plt.subplot(grspec[5,0]), plt.subplot(grspec[6,0])
+        cb1 = plt.colorbar(imswinds[0][0][1], orientation='horizontal', 
                            cax = cbaxes1)#, ticks=np.round(np.arange(-.2,.2,.05),2)) 
         #fig.colorbar(imswinds[0][0][1], cax=cbaxes1)  
         cb2 = plt.colorbar(imswinds[0][1][2], orientation='horizontal', 
                            cax = cbaxes2)#, ticks=np.round(np.arange(-180,180,60),0))  
         #fig.colorbar(imswinds[0][1][2], cax=cbaxes2)   
-
+        
+    fig.text(0.015, 0.75, r"v_HIGH", fontsize=26, ha="center", va="center", rotation=90) 
+    fig.text(0.015, 0.25, r"b_HIGH", fontsize=26, ha="center", va="center", rotation=90) 
     #plt.savefig(pltsavedir+"/UQ_i{}fALLv2".format(i+1,filternr+1))
+    plt.savefig(pltsavedir+"/test.png")
     plt.show()
     plt.close()
+
     
     
-
-
-
+    
+    
     # Fit cubic spline through box centers
     tck, u = interpolate.splprep(boxparms[:,0:2].T, u=None, s=0.0)
     u_new = np.linspace(u.min(), u.max(), 1000)
-    filorxy = interpolate.splev(u_new, tck, der=0)
-    filordxdy = np.diff(filorxy,axis=1)
+    filorxy = np.array(interpolate.splev(u_new, tck, der=0)).T
+    filordxdy = np.diff(filorxy,axis=0)
     filorslope = filordxdy[:,1]/filordxdy[:,0]
-        
-    # Scatter plot Phi_orient vs phi_L
+    filorangle = (180/np.pi) * np.arctan(filorslope) # Deg
+
+    # Scatter plot Theta_orient vs phi_L
     fig, ax = plt.subplots(1)
     filternames, filtercols = ["v_HIGH", "b_HIGH"], ['r', 'b']
     for filternr, filMmask in enumerate(filMmasks_f):
         
         # Select filament polarization angle values
         phiL = stacked_fUQPphi[filternr][3]
-        phiLfil = phiL*filMmask
+        #phiL = np.where(phiL >= 0, phiL, phiL+180) #TODO WHAT TO DO with negative pol angles
+        phiLfil = phiL*filMmask[0:phiL.shape[0],0:phiL.shape[1]]
+        
+        # Bin the polarization angles
+        phiLfil_binned = phiLfil
+        '''
+        phiLfil_binned = np.tile(np.nan,phiLfil.shape)
+        for row, col in cartprod(np.arange(phiLfil.shape[0]),np.arange(phiLfil.shape[1])):
+            phiLfil_binned[row,col] = np.nanmedian(phiLfil[row-1:row+1,col-1:col+1])
+        '''
+        
         
         # Determine orientation angles corresponding to each filament pixel
-        filxy = np.fliplr(np.argwhere(phiLfil != np.nan)) #row, col
-        filslopes = np.tile(np.nan, phiLfil.shape)
+        filxy = np.fliplr(np.argwhere(phiLfil_binned != np.nan)) #row, col
+        filangles = np.tile(np.nan, phiLfil_binned.shape)
         for xy in filxy:
             
-            splevdists = np.sum((filorxy - filxy)**2, axis=1)
-            minslevdistarg = np.unravel_index(splevdists.argmax(),splevdists.shape)
-            filslopes[filxy[1],filxy[0]] = filorslope[minslevdistarg[0],minslevdistarg[1]]
+            if np.isnan(phiLfil[xy[1],xy[0]]):
+                continue
             
-        ax.scatter(filslopes.flatten(), phiLfil.flatten(), 
+            splevdists = np.sqrt(np.sum((filorxy - xy)**2, axis=1))
+            minslevdistarg = splevdists.argmin()
+            if minslevdistarg == filorangle.shape[0]:
+                filangles[xy[1],xy[0]] = filorangle[-1]
+            else:
+                filangles[xy[1],xy[0]] = filorangle[minslevdistarg]
+                
+        
+        filangles = np.where(filangles >= 0, filangles, filangles+180) 
+        ax.scatter(filangles.flatten(), phiLfil_binned.flatten(), 
                    label=filternames[filternr], color=filtercols[filternr])
+                   
+        polfun.savefits(filangles, imsavedir, "filangles_f{}".format(filternr))
+        polfun.savefits(phiLfil, imsavedir, "phiLfil_f{}".format(filternr))
+        
+        
+        
+        # Create boxed polarization angle layouts
+        '''
+        boxedphiL = np.tile(np.nan, phiLfil_binned.shape)
+        Utemp, Qtemp = stacked_fUQPphi[filternr][0:2]        
+        for boxmask in boxmasks_f[filternr]:
+            
+            # Determine median U and Q in boxes
+            Uboxtemp, Qboxtemp = np.median(Utemp[~boxmask]), np.median(Qtemp[~boxmask])
+            boxedphiL[~boxmask] = (180/np.pi) * (0.5*np.arctan(Uboxtemp/Qboxtemp))
+        
+        polfun.savefits(boxedphiL, imsavedir, "boxedphiL_f{}".format(filternr))
+        '''
+        
     
-    ax.set_xlabel(r"$\Theta$"), ax.set_ylabel(r"$\phi_L$")
+    ax.set_xlabel(r"$\Theta [^{\circ}]$", fontsize=20)
+    ax.set_ylabel(r"$\phi_L [^{\circ}]$", fontsize=20)
     plt.legend(loc='best')
+    plt.savefig(pltsavedir+"/test2.png")
     plt.show()
     plt.close()
     
@@ -801,7 +850,65 @@ for i, objdir in enumerate([std_dirs[0], std_dirs[1], sci_dirs[0]]):
     
     
     
+    # Scatter plot Theta_radial vs phi_L
+    fig, ax = plt.subplots(1)
+    filternames, filtercols = ["v_HIGH", "b_HIGH"], ['r', 'b']
+    for filternr, filMmask in enumerate(filMmasks_f):
+        
+        # Select filament polarization angle values
+        phiL = stacked_fUQPphi[filternr][3]
+        phiLfil = phiL*filMmask[0:phiL.shape[0],0:phiL.shape[1]]
+        
+        # Bin the polarization angles
+        phiLfil_binned = np.tile(np.nan,phiLfil.shape)
+        for row, col in cartprod(np.arange(phiLfil.shape[0]),np.arange(phiLfil.shape[1])):
+            phiLfil_binned[row,col] = np.nanmedian(phiLfil[row-1:row+1,col-1:col+1])
+        
+        # Determine orientation angles corresponding to each filament pixel
+        filxy = np.fliplr(np.argwhere(phiLfil_binned != np.nan)) #row, col
+        filangles = np.tile(np.nan, phiLfil_binned.shape)
+        for xy in filxy:
+            
+            if np.isnan(phiLfil[xy[1],xy[0]]):
+                continue
+            
+            splevdists = np.sqrt(np.sum((filorxy - xy)**2, axis=1))
+            minslevdistarg = splevdists.argmin()
+            if minslevdistarg == filorangle.shape[0]:
+                filangles[xy[1],xy[0]] = filorangle[-1]
+            else:
+                filangles[xy[1],xy[0]] = filorangle[minslevdistarg]
+                
+        
+        filangles = np.where(filangles >= 0, filangles, filangles+180) 
+        ax.scatter(filangles.flatten(), phiLfil_binned.flatten(), 
+                   label=filternames[filternr], color=filtercols[filternr])
+                   
+        polfun.savefits(filangles, imsavedir, "filangles_f{}".format(filternr))
+        polfun.savefits(phiLfil, imsavedir, "phiLfil_f{}".format(filternr))
+        
+        
+        
+        # Create boxed polarization angle layouts
+        '''
+        boxedphiL = np.tile(np.nan, phiLfil_binned.shape)
+        Utemp, Qtemp = stacked_fUQPphi[filternr][0:2]        
+        for boxmask in boxmasks_f[filternr]:
+            
+            # Determine median U and Q in boxes
+            Uboxtemp, Qboxtemp = np.median(Utemp[~boxmask]), np.median(Qtemp[~boxmask])
+            boxedphiL[~boxmask] = (180/np.pi) * (0.5*np.arctan(Uboxtemp/Qboxtemp))
+        
+        polfun.savefits(boxedphiL, imsavedir, "boxedphiL_f{}".format(filternr))
+        '''
+        
     
+    ax.set_xlabel(r"$\Theta [^{\circ}]$", fontsize=20)
+    ax.set_ylabel(r"$\phi_L [^{\circ}]$", fontsize=20)
+    plt.legend(loc='best')
+    plt.savefig(pltsavedir+"/test2.png")
+    plt.show()
+    plt.close()    
     
     
     

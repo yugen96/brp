@@ -61,9 +61,9 @@ def createdir(direc, replace=False):
         os.makedirs(direc)
     elif (os.path.exists(direc) and replace):
         shutil.rmtree(direc)
-        os.makedirs(direc)    
-
-
+        os.makedirs(direc)   
+        
+        
 
 #################### END GENERIC FUNCTIONS ####################
 
@@ -732,6 +732,43 @@ def savenp(data, savedir, fname):
         os.remove(savedir + '/' + fname + ".npy")
     # Save to numpy file
     np.save(savedir + '/' + fname, data)
+
+
+
+# Function for writing tables
+def writetable(datarr, datarr_std, rownames, colnames, savedir, fname, rounddig=1, overwrite=False):
+    
+    # Store initial directory name
+    initdir = os.getcwd()
+    # Save to fits files
+    if not os.path.exists(savedir):
+        os.makedirs(savedir) 
+    os.chdir(savedir)    
+    # Prevent saving conflicts
+    if os.path.exists(savedir + '/' + fname) and not overwrite:
+        savefile = open("{}".format(fname),'a')
+        savefile.write("\n\n\n\n\n")
+    else: 
+        savefile = open("{}".format(fname),'w') 
+     
+    # Write column names
+    colnamesstr = colnames[0]
+    for colname in colnames[1::]: 
+        colnamesstr = colnamesstr+" \t&\t "+colname
+    savefile.write(colnamesstr + " \\\\ \n"), savefile.write("\\hline \n")
+    # Write data
+    for rowno, datarow in enumerate(datarr):
+        rowstr = rownames[rowno]
+        for dataval, std in zip(datarow,datarr_std[rowno]):
+            antepointdat, postpointdat = str(dataval).split(".")
+            antepointstd, postpointstd = str(std).split(".")
+            rowstr = rowstr+" \t&\t {} \\pm {}".format(antepointdat+"."+postpointdat[0:rounddig],
+                                                       antepointstd+"."+postpointstd[0:rounddig])
+        savefile.write(rowstr + " \\\\ \n"), savefile.write("\\hline \n")
+    
+    # Return to initial directory
+    savefile.close()
+    os.chdir(initdir)
     
 
 
@@ -1265,8 +1302,8 @@ def offsetopt_well(ims, dxrange, dyrange, center, R,
     fitdata = offset_arr.ravel()
     dxgrid, dygrid = np.meshgrid(dxrange, dyrange)
     popt_gauss, pcov_gauss = curve_fit(gaussian2d, (dxgrid, dygrid), fitdata, p0_gauss)
-    print("Absolute 2dGauss min.:\t\t(dx,dy)={}".format(popt_gauss[[0,1]]))
-    print("Fit parameter variances:\t\t", np.diag(pcov_gauss))
+    #print("Absolute 2dGauss min.:\t\t(dx,dy)={}".format(popt_gauss[[0,1]]))
+    #print("Fit parameter variances:\t\t", np.diag(pcov_gauss))
     
     
     # Warn if the variance of the x0 and y0 becomes too high (i.e. sqrt(sigma_dx**2 + sigma_dy**2 )> 1)
@@ -1288,8 +1325,7 @@ def offsetopt_well(ims, dxrange, dyrange, center, R,
     fig.colorbar(fitdat)
     plt.show()
     plt.close()
-    '''
-    # Diagnostic plot    
+    ''' # Diagnostic plot    
     
     
     
@@ -1587,12 +1623,12 @@ def align_slits2(slits, pixoffs):
 
 
 
-# Function for stacking images
+# Function for stacking images (Poisson distribution is assumed)
 def stackim(ims, offs=None, returnmask=False):
     
     # Initialize offsets
     if offs is None:
-        offs = np.zeros(len(ims), dtype=int)
+        offs = np.zeros([len(ims),2], dtype=int)
     
     # Set framesize
     maxNy, maxNx = np.amax([im.shape for im in ims], axis=0)
@@ -1730,8 +1766,8 @@ def detslitdiffnorm(slitpair, pixoffs, suboffs_i, savefigs=False,
         savefits(O_E_grad, imdirec, "O-E-grad{}".format(suffix)) 
     
     return [O_E, OplusE, O_E_grad]
-    
-    
+
+
 
 # Function for determining linear Stokes parameters and polarization degrees and angles
 # in each pixel of a given set of slits slitdiffnorm_lst 
@@ -1744,7 +1780,7 @@ def detpol(slitdiffnorm_lst, S_N, corran=0.,
      slitdiffnorm45, slitdiffnorm67_5] = slitdiffnorm_lst
     # Align exposures
     slitshape = slitdiffnorm0.shape
-    print("DEBUG in detpol slitshape = {}".format(slitshape))
+    #print("DEBUG in detpol slitshape = {}".format(slitshape))
     framesize = 2*np.array(slitshape)
     lowlcorn = (0.25*framesize).astype(int)
     if np.sum(offsxy0__45 != np.zeros(2)) != 0:
@@ -1766,10 +1802,9 @@ def detpol(slitdiffnorm_lst, S_N, corran=0.,
         U_norm = U_norm[lowlcorn[0]:lowlcorn[0]+slitshape[0],
                         lowlcorn[1]:lowlcorn[1]+slitshape[1]]
     # Determine error margins (see Bagnulo 2009 appendix formulae A14 and A15)
-    sigmaQ_norm = (1/(2*np.sqrt(len(slitdiffnorm_lst))) / S_N)
-    sigmaU_norm = (1/(2*np.sqrt(len(slitdiffnorm_lst))) / S_N)    
-    print("DEBUG in detpol Q^2 + U^2 - sigma_Q^2:\t{}".format(U_norm**2 + Q_norm**2 
-                                                                        - sigmaU_norm**2))
+    sigmaQ_norm = (1/(2*np.sqrt(len(slitdiffnorm_lst))) / np.abs(S_N))
+    sigmaU_norm = (1/(2*np.sqrt(len(slitdiffnorm_lst))) / np.abs(S_N))    
+    
     
     # Diagnostic plot (check exposure alignment)
     plt.imshow(U_norm - Q_norm, origin='lower', vmin=-1, vmax=1)
@@ -1789,10 +1824,13 @@ def detpol(slitdiffnorm_lst, S_N, corran=0.,
          sigmaQ_normemb, sigmaU_normemb] = [Q_norm, U_norm, sigmaQ_norm, sigmaU_norm]
     
     
-    # Determine degree and angle of linear polarization
+    # Determine degree of linear polarization
     pL = np.sqrt(U_normemb**2 + Q_normemb**2)
+    # Determine angle of linear polarization (see Bagnulo eq. (8) for Theta0 definition)
     phiL = 0.5 * np.arctan(U_normemb/Q_normemb) #radians                    
-                       
+    phiL = np.where( ~((Q_normemb>0)*(U_normemb<0)), phiL, phiL+np.pi)
+    phiL = np.where( (Q_normemb>=0), phiL, phiL+0.5*np.pi) # Add Theta0
+    
     
     # Determine error margins (see Bagnulo 2009 appendix formulae A14 and A15)
     sigma_pL = np.sqrt( (np.cos(2*phiL))**2 * sigmaQ_normemb**2 + 
@@ -1808,12 +1846,32 @@ def detpol(slitdiffnorm_lst, S_N, corran=0.,
                 lowlcorn[1]:lowlcorn[1]+slitshape[1]]
         phiL = phiL[lowlcorn[0]:lowlcorn[0]+slitshape[0],
                     lowlcorn[1]:lowlcorn[1]+slitshape[1]]  
-        sigma_pL = pL[lowlcorn[0]:lowlcorn[0]+slitshape[0],
-                      lowlcorn[1]:lowlcorn[1]+slitshape[1]]
-        sigma_phiL = phiL[lowlcorn[0]:lowlcorn[0]+slitshape[0],
-                          lowlcorn[1]:lowlcorn[1]+slitshape[1]]              
-   
-   
+        sigma_pL = sigma_pL[lowlcorn[0]:lowlcorn[0]+slitshape[0],
+                            lowlcorn[1]:lowlcorn[1]+slitshape[1]]
+        sigma_phiL = sigma_phiL[lowlcorn[0]:lowlcorn[0]+slitshape[0],
+                                lowlcorn[1]:lowlcorn[1]+slitshape[1]]         
+    
+    
+    '''
+    if pL.shape != sigma_phiL.shape != (80,1685) or phiL.shape != (80,1685) or sigma_pL.shape != (80,1685) or sigma_phiL.shape != (80,1685):
+        print("pL.shape:\t{}\n".format(pL.shape))
+        print("phiL.shape:\t{}\n".format(phiL.shape))
+        print("sigma_pL.shape:\t{}\n".format(sigma_pL.shape))
+        print("sigma_phiL.shape:\t{}\n".format(sigma_phiL.shape))
+        print("ERROOOOOOOOOOOOOOOOOOR")  
+        for nr, thing in enumerate(slitdiffnorm_lst):
+            print("Slitdiffnormlstshape {}:\t{}".format(nr,thing.shape))
+        print("S_N.shape:\t{}\n".format(S_N.shape))
+        print("Q_norm.shape:\t{}".format(Q_norm.shape))
+        print("U_norm.shape:\t{}\n".format(U_norm.shape))        
+        print("Q_normemb.shape:\t{}".format(Q_normemb.shape))
+        print("U_normemb.shape:\t{}\n".format(U_normemb.shape))
+        
+        raise ValueError
+    '''
+    
+    
+    
     # Diagnostic plot
     '''
     print("DEBUG detpol:\t\t{}\t{}".format(Q_normemb.shape, U_normemb.shape))
@@ -1888,14 +1946,14 @@ def createrectmask(data, boxcent, boxsizs, theta):
     
 
 
-# Function for producing sersic galactic instensity profile
-def sersic(I0, center, k, n):
+# Function for determining the angles of gas filaments
+def detangle(vec1, vec2):
     
-    rowgrid, colgrid = np.meshgrid(np.arange(I0.shape[0], np.arange(I0.shape[1])))
-    R = np.sqrt((rowgrid-center[1])**2+(colgrid-center[0])**2)
-    I = I0*np.exp(-k * R**(1/n))
+    len1, len2 = np.sqrt([np.sum(vec1**2), np.sum(vec2**2)])
+    costheta = np.dot(vec1, vec2) / (len1*len2)
+    theta = np.arccos(costheta)
     
-    return(I)
+    return theta
     
     
     
